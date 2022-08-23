@@ -13,7 +13,7 @@ cp -r build/bin/Release/citra-qt.app "$REV_NAME"
 cp build/bin/Release/citra-room "$REV_NAME"
 
 # move libs into folder for deployment
-macpack "${REV_NAME}/citra-qt.app/Contents/MacOS/citra-qt" -d "../Frameworks"
+macpack "${REV_NAME}/citra-qt.app/Contents/MacOS/citra-qt" -d "Frameworks"
 # move qt frameworks into app bundle for deployment
 $(brew --prefix)/opt/qt5/bin/macdeployqt "${REV_NAME}/citra-qt.app" -executable="${REV_NAME}/citra-qt.app/Contents/MacOS/citra-qt"
 
@@ -29,5 +29,5 @@ chmod +x ${REV_NAME}/citra-qt.app/Contents/MacOS/citra-qt
 
 # Verify loader instructions
 find "$REV_NAME" -type f -exec otool -L {} \;
-
+codesign --force --deep --sign - ${REV_NAME}/citra-qt.app/Contents/MacOS/citra-qt
 . .ci/common/post-upload.sh
