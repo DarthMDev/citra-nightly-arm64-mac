@@ -963,6 +963,7 @@ bool GMainWindow::LoadROM(const QString& filename) {
 
     Frontend::ScopeAcquireContext scope(*render_window);
 
+#ifdef __APPLE__
     const QString below_gl43_title = tr("OpenGL 4.3 Unsupported");
     const QString below_gl43_message = tr("Your GPU may not support OpenGL 4.3, or you do not "
                                           "have the latest graphics driver.");
@@ -971,6 +972,7 @@ bool GMainWindow::LoadROM(const QString& filename) {
         QMessageBox::critical(this, below_gl43_title, below_gl43_message);
         return false;
     }
+#endif
 
     Core::System& system{Core::System::GetInstance()};
 
@@ -2545,7 +2547,11 @@ int main(int argc, char* argv[]) {
     QCoreApplication::setApplicationName(QStringLiteral("Citra"));
 
     QSurfaceFormat format;
+#ifdef __APPLE__
+    format.setVersion(4, 1);
+#else
     format.setVersion(4, 3);
+#endif
     format.setProfile(QSurfaceFormat::CoreProfile);
     format.setSwapInterval(0);
     // TODO: expose a setting for buffer value (ie default/single/double/triple)
