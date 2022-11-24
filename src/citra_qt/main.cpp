@@ -1041,10 +1041,12 @@ bool GMainWindow::LoadROM(const QString& filename) {
                    "proper drivers for your graphics card from the manufacturer's website."));
             break;
 
+#ifndef __APPLE__
         case Core::System::ResultStatus::ErrorVideoCore_ErrorBelowGL43:
             QMessageBox::critical(this, below_gl43_title, below_gl43_message);
             break;
-
+#endif
+                
         default:
             QMessageBox::critical(
                 this, tr("Error while loading ROM!"),
