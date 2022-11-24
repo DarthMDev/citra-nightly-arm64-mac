@@ -963,7 +963,7 @@ bool GMainWindow::LoadROM(const QString& filename) {
 
     Frontend::ScopeAcquireContext scope(*render_window);
 
-#ifdef __APPLE__
+#ifndef __APPLE__
     const QString below_gl43_title = tr("OpenGL 4.3 Unsupported");
     const QString below_gl43_message = tr("Your GPU may not support OpenGL 4.3, or you do not "
                                           "have the latest graphics driver.");
