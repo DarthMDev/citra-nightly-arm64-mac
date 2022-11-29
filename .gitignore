@@ -41,3 +41,7 @@ repo/
 
 # GitHub Actions generated files
 node_modules/
+
+# built citra
+head/
+artifacts/
