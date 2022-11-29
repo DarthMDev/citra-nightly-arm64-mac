@@ -93,8 +93,9 @@ jobs:
       - name: Build
         run: ./.ci/macos/build.sh
         env:
-          MACOSX_DEPLOYMENT_TARGET: "10.13"
+          MACOSX_DEPLOYMENT_TARGET: "12.0"
           ENABLE_COMPATIBILITY_REPORTING: "ON"
+          CIBW_ARCHS_MACOS: arm64
       - name: Pack
         run: ./.ci/macos/upload.sh
       - name: Upload
