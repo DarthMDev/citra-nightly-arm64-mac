@@ -3,9 +3,7 @@
 // Refer to the license.txt file included.
 
 #pragma once
-
 #include <array>
-
 #include "common/assert.h"
 #include "common/bit_field.h"
 #include "common/common_funcs.h"
@@ -276,9 +274,11 @@ struct FramebufferRegs {
         case DepthFormat::D24:
         case DepthFormat::D24S8:
             return 24;
+        default:
+            UNREACHABLE_MSG("Unknown depth format {}", format);
         }
 
-        ASSERT_MSG(false, "Unknown depth format {}", format);
+        return 0;
     }
 
     INSERT_PADDING_WORDS(0x10); // Gas related registers

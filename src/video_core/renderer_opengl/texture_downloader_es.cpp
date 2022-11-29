@@ -4,13 +4,10 @@
 
 #include <chrono>
 #include <vector>
-
 #include <fmt/chrono.h>
-
 #include "common/logging/log.h"
-#include "video_core/renderer_opengl/gl_rasterizer_cache.h"
+#include "video_core/rasterizer_cache/rasterizer_cache_utils.h"
 #include "video_core/renderer_opengl/gl_state.h"
-#include "video_core/renderer_opengl/gl_vars.h"
 #include "video_core/renderer_opengl/texture_downloader_es.h"
 
 #include "shaders/depth_to_color.frag"
@@ -78,13 +75,13 @@ void TextureDownloaderES::Test() {
             }
     };
     LOG_INFO(Render_OpenGL, "GL_DEPTH24_STENCIL8 download test starting");
-    test(depth_format_tuples[3], std::vector<u32>{}, 4096,
+    test(GetFormatTuple(PixelFormat::D24S8), std::vector<u32>{}, 4096,
          [](std::size_t idx) { return static_cast<u32>((idx << 8) | (idx & 0xFF)); });
     LOG_INFO(Render_OpenGL, "GL_DEPTH_COMPONENT24 download test starting");
-    test(depth_format_tuples[2], std::vector<u32>{}, 4096,
+    test(GetFormatTuple(PixelFormat::D24), std::vector<u32>{}, 4096,
          [](std::size_t idx) { return static_cast<u32>(idx << 8); });
     LOG_INFO(Render_OpenGL, "GL_DEPTH_COMPONENT16 download test starting");
-    test(depth_format_tuples[0], std::vector<u16>{}, 256,
+    test(GetFormatTuple(PixelFormat::D16), std::vector<u16>{}, 256,
          [](std::size_t idx) { return static_cast<u16>(idx); });
 
     cur_state.Apply();
@@ -211,7 +208,7 @@ GLuint TextureDownloaderES::ConvertDepthToColor(GLuint level, GLenum& format, GL
 void TextureDownloaderES::GetTexImage(GLenum target, GLuint level, GLenum format, GLenum type,
                                       GLint height, GLint width, void* pixels) {
     OpenGLState state = OpenGLState::GetCurState();
-    GLuint texture;
+    GLuint texture{};
     const GLuint old_read_buffer = state.draw.read_framebuffer;
     switch (target) {
     case GL_TEXTURE_2D:

@@ -534,9 +534,8 @@ static void SendReply(const char* reply) {
 
 /// Handle query command from gdb client.
 static void HandleQuery() {
-    LOG_DEBUG(Debug_GDBStub, "gdb: query '{}'\n", command_buffer + 1);
-
     const char* query = reinterpret_cast<const char*>(command_buffer + 1);
+    LOG_DEBUG(Debug_GDBStub, "gdb: query '{}'\n", query);
 
     if (strcmp(query, "TStatus") == 0) {
         SendReply("T0");
@@ -685,7 +684,8 @@ static void ReadCommand() {
         LOG_ERROR(
             Debug_GDBStub,
             "gdb: invalid checksum: calculated {:02x} and read {:02x} for ${}# (length: {})\n",
-            checksum_calculated, checksum_received, command_buffer, command_length);
+            checksum_calculated, checksum_received, reinterpret_cast<const char*>(command_buffer),
+            command_length);
 
         command_length = 0;
 
@@ -705,7 +705,7 @@ static bool IsDataAvailable() {
     fd_set fd_socket;
 
     FD_ZERO(&fd_socket);
-    FD_SET(gdbserver_socket, &fd_socket);
+    FD_SET(static_cast<u32>(gdbserver_socket), &fd_socket);
 
     struct timeval t;
     t.tv_sec = 0;
@@ -849,14 +849,14 @@ static void ReadMemory() {
         SendReply("E01");
     }
 
-    if (!Memory::IsValidVirtualAddress(*Core::System::GetInstance().Kernel().GetCurrentProcess(),
-                                       addr)) {
+    auto& memory = Core::System::GetInstance().Memory();
+    if (!memory.IsValidVirtualAddress(*Core::System::GetInstance().Kernel().GetCurrentProcess(),
+                                      addr)) {
         return SendReply("E00");
     }
 
     std::vector<u8> data(len);
-    Core::System::GetInstance().Memory().ReadBlock(
-        *Core::System::GetInstance().Kernel().GetCurrentProcess(), addr, data.data(), len);
+    memory.ReadBlock(addr, data.data(), len);
 
     MemToGdbHex(reply, data.data(), len);
     reply[len * 2] = '\0';
@@ -873,16 +873,16 @@ static void WriteMemory() {
     auto len_pos = std::find(start_offset, command_buffer + command_length, ':');
     u32 len = HexToInt(start_offset, static_cast<u32>(len_pos - start_offset));
 
-    if (!Memory::IsValidVirtualAddress(*Core::System::GetInstance().Kernel().GetCurrentProcess(),
-                                       addr)) {
+    auto& memory = Core::System::GetInstance().Memory();
+    if (!memory.IsValidVirtualAddress(*Core::System::GetInstance().Kernel().GetCurrentProcess(),
+                                      addr)) {
         return SendReply("E00");
     }
 
     std::vector<u8> data(len);
 
     GdbHexToMem(data.data(), len_pos + 1, len);
-    Core::System::GetInstance().Memory().WriteBlock(
-        *Core::System::GetInstance().Kernel().GetCurrentProcess(), addr, data.data(), len);
+    memory.WriteBlock(addr, data.data(), len);
     Core::GetRunningCore().ClearInstructionCache();
     SendReply("OK");
 }
@@ -1059,7 +1059,7 @@ void HandlePacket() {
         return;
     }
 
-    LOG_DEBUG(Debug_GDBStub, "Packet: {}", command_buffer);
+    LOG_DEBUG(Debug_GDBStub, "Packet: {}", command_buffer[0]);
 
     switch (command_buffer[0]) {
     case 'q':

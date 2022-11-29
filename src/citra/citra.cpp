@@ -11,13 +11,6 @@
 // This needs to be included before getopt.h because the latter #defines symbols used by it
 #include "common/microprofile.h"
 
-#ifdef _WIN32
-// windows.h needs to be included before shellapi.h
-#include <windows.h>
-
-#include <shellapi.h>
-#endif
-
 #include "citra/config.h"
 #include "citra/emu_window/emu_window_sdl2.h"
 #include "citra/lodepng_image_interface.h"
@@ -42,6 +35,7 @@
 #include "core/loader/loader.h"
 #include "core/movie.h"
 #include "core/settings.h"
+#include "input_common/main.h"
 #include "network/network.h"
 #include "video_core/renderer_base.h"
 
@@ -52,6 +46,11 @@
 #endif
 
 #ifdef _WIN32
+// windows.h needs to be included before shellapi.h
+#include <windows.h>
+
+#include <shellapi.h>
+
 extern "C" {
 // tells Nvidia drivers to use the dedicated GPU by default on laptops with switchable graphics
 __declspec(dllexport) unsigned long NvOptimusEnablement = 0x00000001;
@@ -104,41 +103,44 @@ static void OnNetworkError(const Network::RoomMember::Error& error) {
         break;
     case Network::RoomMember::Error::CouldNotConnect:
         LOG_ERROR(Network, "Error: Could not connect");
-        exit(1);
+        std::exit(1);
         break;
     case Network::RoomMember::Error::NameCollision:
         LOG_ERROR(
             Network,
             "You tried to use the same nickname as another user that is connected to the Room");
-        exit(1);
+        std::exit(1);
         break;
     case Network::RoomMember::Error::MacCollision:
         LOG_ERROR(Network, "You tried to use the same MAC-Address as another user that is "
                            "connected to the Room");
-        exit(1);
+        std::exit(1);
         break;
     case Network::RoomMember::Error::ConsoleIdCollision:
         LOG_ERROR(Network, "Your Console ID conflicted with someone else in the Room");
-        exit(1);
+        std::exit(1);
         break;
     case Network::RoomMember::Error::WrongPassword:
         LOG_ERROR(Network, "Room replied with: Wrong password");
-        exit(1);
+        std::exit(1);
         break;
     case Network::RoomMember::Error::WrongVersion:
         LOG_ERROR(Network,
                   "You are using a different version than the room you are trying to connect to");
-        exit(1);
+        std::exit(1);
         break;
     case Network::RoomMember::Error::RoomIsFull:
         LOG_ERROR(Network, "The room is full");
-        exit(1);
+        std::exit(1);
         break;
     case Network::RoomMember::Error::HostKicked:
         LOG_ERROR(Network, "You have been kicked by the host");
         break;
     case Network::RoomMember::Error::HostBanned:
         LOG_ERROR(Network, "You have been banned by the host");
+        break;
+    default:
+        LOG_ERROR(Network, "Unknown network error: {}", error);
         break;
     }
 }
@@ -358,11 +360,23 @@ int main(int argc, char** argv) {
     // Register generic image interface
     Core::System::GetInstance().RegisterImageInterface(std::make_shared<LodePNGImageInterface>());
 
-    std::unique_ptr<EmuWindow_SDL2> emu_window{std::make_unique<EmuWindow_SDL2>(fullscreen)};
-    Frontend::ScopeAcquireContext scope(*emu_window);
-    Core::System& system{Core::System::GetInstance()};
+    EmuWindow_SDL2::InitializeSDL2();
 
-    const Core::System::ResultStatus load_result{system.Load(*emu_window, filepath)};
+    const auto emu_window{std::make_unique<EmuWindow_SDL2>(fullscreen, false)};
+    const bool use_secondary_window{Settings::values.layout_option ==
+                                    Settings::LayoutOption::SeparateWindows};
+    const auto secondary_window =
+        use_secondary_window ? std::make_unique<EmuWindow_SDL2>(false, true) : nullptr;
+
+    Frontend::ScopeAcquireContext scope(*emu_window);
+
+    LOG_INFO(Frontend, "Citra Version: {} | {}-{}", Common::g_build_fullname, Common::g_scm_branch,
+             Common::g_scm_desc);
+    Settings::LogSettings();
+
+    Core::System& system = Core::System::GetInstance();
+    const Core::System::ResultStatus load_result{
+        system.Load(*emu_window, filepath, secondary_window.get())};
 
     switch (load_result) {
     case Core::System::ResultStatus::ErrorGetLoader:
@@ -430,16 +444,25 @@ int main(int argc, char** argv) {
         system.VideoDumper().StartDumping(dump_video, layout);
     }
 
-    std::thread render_thread([&emu_window] { emu_window->Present(); });
+    std::thread main_render_thread([&emu_window] { emu_window->Present(); });
+    std::thread secondary_render_thread([&secondary_window] {
+        if (secondary_window) {
+            secondary_window->Present();
+        }
+    });
 
     std::atomic_bool stop_run;
-    Core::System::GetInstance().Renderer().Rasterizer()->LoadDiskResources(
+    system.Renderer().Rasterizer()->LoadDiskResources(
         stop_run, [](VideoCore::LoadCallbackStage stage, std::size_t value, std::size_t total) {
             LOG_DEBUG(Frontend, "Loading stage {} progress {} {}", static_cast<u32>(stage), value,
                       total);
         });
 
-    while (emu_window->IsOpen()) {
+    const auto secondary_is_open = [&secondary_window] {
+        // if the secondary window isn't created, it shouldn't affect the main loop
+        return secondary_window ? secondary_window->IsOpen() : true;
+    };
+    while (emu_window->IsOpen() && secondary_is_open()) {
         const auto result = system.RunLoop();
 
         switch (result) {
@@ -453,12 +476,20 @@ int main(int argc, char** argv) {
             break;
         }
     }
-    render_thread.join();
+    emu_window->RequestClose();
+    if (secondary_window) {
+        secondary_window->RequestClose();
+    }
+    main_render_thread.join();
+    secondary_render_thread.join();
 
     Core::Movie::GetInstance().Shutdown();
     if (system.VideoDumper().IsDumping()) {
         system.VideoDumper().StopDumping();
     }
+
+    Network::Shutdown();
+    InputCommon::Shutdown();
 
     system.Shutdown();
 

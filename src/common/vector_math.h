@@ -31,6 +31,7 @@
 #pragma once
 
 #include <cmath>
+#include <cstring>
 #include <type_traits>
 #include <boost/serialization/access.hpp>
 
@@ -57,6 +58,10 @@ public:
     T y;
 
     T* AsArray() {
+        return &x;
+    }
+
+    const T* AsArray() const {
         return &x;
     }
 
@@ -123,9 +128,17 @@ public:
         return x * x + y * y;
     }
 
+    [[nodiscard]] constexpr bool operator!=(const Vec2& other) const {
+        return std::memcmp(AsArray(), other.AsArray(), sizeof(Vec2)) != 0;
+    }
+
+    [[nodiscard]] constexpr bool operator==(const Vec2& other) const {
+        return std::memcmp(AsArray(), other.AsArray(), sizeof(Vec2)) == 0;
+    }
+
     // Only implemented for T=float
     [[nodiscard]] float Length() const;
-    [[nodiscard]] float Normalize(); // returns the previous length, which is often useful
+    float Normalize(); // returns the previous length, which is often useful
 
     [[nodiscard]] constexpr T& operator[](std::size_t i) {
         return *((&x) + i);
@@ -184,6 +197,8 @@ template <typename T, typename V>
 }
 
 using Vec2f = Vec2<float>;
+using Vec2i = Vec2<int>;
+using Vec2u = Vec2<unsigned int>;
 
 template <>
 inline float Vec2<float>::Length() const {
@@ -213,6 +228,10 @@ public:
     T z;
 
     T* AsArray() {
+        return &x;
+    }
+
+    const T* AsArray() const {
         return &x;
     }
 
@@ -280,6 +299,14 @@ public:
         return *this;
     }
 
+    [[nodiscard]] constexpr bool operator!=(const Vec3& other) const {
+        return std::memcmp(AsArray(), other.AsArray(), sizeof(Vec3)) != 0;
+    }
+
+    [[nodiscard]] constexpr bool operator==(const Vec3& other) const {
+        return std::memcmp(AsArray(), other.AsArray(), sizeof(Vec3)) == 0;
+    }
+
     [[nodiscard]] constexpr T Length2() const {
         return x * x + y * y + z * z;
     }
@@ -287,7 +314,7 @@ public:
     // Only implemented for T=float
     [[nodiscard]] float Length() const;
     [[nodiscard]] Vec3 Normalized() const;
-    [[nodiscard]] float Normalize(); // returns the previous length, which is often useful
+    float Normalize(); // returns the previous length, which is often useful
 
     [[nodiscard]] constexpr T& operator[](std::size_t i) {
         return *((&x) + i);
@@ -412,6 +439,8 @@ inline float Vec3<float>::Normalize() {
 }
 
 using Vec3f = Vec3<float>;
+using Vec3i = Vec3<int>;
+using Vec3u = Vec3<unsigned int>;
 
 template <typename T>
 class Vec4 {
@@ -431,6 +460,10 @@ public:
     T w;
 
     T* AsArray() {
+        return &x;
+    }
+
+    const T* AsArray() const {
         return &x;
     }
 
@@ -501,6 +534,14 @@ public:
     constexpr Vec4& operator/=(const V& f) {
         *this = *this / f;
         return *this;
+    }
+
+    [[nodiscard]] constexpr bool operator!=(const Vec4& other) const {
+        return std::memcmp(AsArray(), other.AsArray(), sizeof(Vec4)) != 0;
+    }
+
+    [[nodiscard]] constexpr bool operator==(const Vec4& other) const {
+        return std::memcmp(AsArray(), other.AsArray(), sizeof(Vec4)) == 0;
     }
 
     [[nodiscard]] constexpr T Length2() const {
@@ -623,6 +664,8 @@ template <typename T, typename V>
 }
 
 using Vec4f = Vec4<float>;
+using Vec4i = Vec4<int>;
+using Vec4u = Vec4<unsigned int>;
 
 template <typename T>
 constexpr decltype(T{} * T{} + T{} * T{}) Dot(const Vec2<T>& a, const Vec2<T>& b) {
@@ -647,8 +690,8 @@ template <typename T>
 
 // linear interpolation via float: 0.0=begin, 1.0=end
 template <typename X>
-[[nodiscard]] constexpr decltype(X{} * float{} + X{} * float{}) Lerp(const X& begin, const X& end,
-                                                                     const float t) {
+[[nodiscard]] constexpr decltype(X{} * float{} + X{} * float{})
+    Lerp(const X& begin, const X& end, const float t) {
     return begin * (1.f - t) + end * t;
 }
 

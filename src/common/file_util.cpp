@@ -31,8 +31,10 @@
 #endif
 
 // 64 bit offsets for MSVC and MinGW. MinGW also needs this for using _wstat64
+#ifndef __MINGW64__
 #define stat _stat64
 #define fstat _fstat64
+#endif
 
 #else
 #ifdef __APPLE__
@@ -774,6 +776,9 @@ const std::string& GetDefaultUserPath(UserPath path) {
 }
 
 const void UpdateUserPath(UserPath path, const std::string& filename) {
+    if (filename.empty()) {
+        return;
+    }
     if (!FileUtil::IsDirectory(filename)) {
         LOG_ERROR(Common_Filesystem, "Path is not a directory. UserPath: {}  filename: {}", path,
                   filename);

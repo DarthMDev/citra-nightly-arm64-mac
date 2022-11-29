@@ -24,7 +24,9 @@ enum class LayoutOption {
     SingleScreen,
     LargeScreen,
     SideScreen,
-
+#ifndef ANDROID
+    SeparateWindows,
+#endif
     // Similiar to default, but better for mobile devices in portrait mode. Top screen in clamped to
     // the top of the frame, and the bottom screen is enlarged to match the top screen.
     MobilePortrait,
@@ -155,11 +157,13 @@ struct Values {
 
     // Data Storage
     bool use_virtual_sd;
+    bool use_custom_storage;
 
     // System
     int region_value;
     InitClock init_clock;
     u64 init_time;
+    s64 init_time_offset;
 
     // Renderer
     bool use_gles;
@@ -195,6 +199,8 @@ struct Values {
     StereoRenderOption render_3d;
     std::atomic<u8> factor_3d;
 
+    bool mono_render_left_eye;
+
     int cardboard_screen_size;
     int cardboard_x_shift;
     int cardboard_y_shift;
@@ -209,6 +215,7 @@ struct Values {
     bool use_vsync_new;
 
     // Audio
+    bool audio_muted;
     bool enable_dsp_lle;
     bool enable_dsp_lle_multithread;
     std::string sink_id;
@@ -242,6 +249,8 @@ struct Values {
     std::string audio_encoder_options;
     u64 audio_bitrate;
 } extern values;
+
+float Volume();
 
 // a special value for Values::region_value indicating that citra will automatically select a region
 // value to fit the region lockout info of the game

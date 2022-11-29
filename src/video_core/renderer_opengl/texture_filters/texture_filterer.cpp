@@ -8,6 +8,7 @@
 #include "common/logging/log.h"
 #include "video_core/renderer_opengl/texture_filters/anime4k/anime4k_ultrafast.h"
 #include "video_core/renderer_opengl/texture_filters/bicubic/bicubic.h"
+#include "video_core/renderer_opengl/texture_filters/nearest_neighbor/nearest_neighbor.h"
 #include "video_core/renderer_opengl/texture_filters/scale_force/scale_force.h"
 #include "video_core/renderer_opengl/texture_filters/texture_filter_base.h"
 #include "video_core/renderer_opengl/texture_filters/texture_filterer.h"
@@ -28,6 +29,7 @@ static const std::unordered_map<std::string_view, TextureFilterContructor> filte
     {TextureFilterer::NONE, [](u16) { return nullptr; }},
     FilterMapPair<Anime4kUltrafast>(),
     FilterMapPair<Bicubic>(),
+    FilterMapPair<NearestNeighbor>(),
     FilterMapPair<ScaleForce>(),
     FilterMapPair<XbrzFreescale>(),
 };
@@ -58,15 +60,16 @@ bool TextureFilterer::IsNull() const {
     return !filter;
 }
 
-bool TextureFilterer::Filter(GLuint src_tex, const Common::Rectangle<u32>& src_rect, GLuint dst_tex,
-                             const Common::Rectangle<u32>& dst_rect,
-                             SurfaceParams::SurfaceType type, GLuint read_fb_handle,
-                             GLuint draw_fb_handle) {
-    // depth / stencil texture filtering is not supported for now
-    if (IsNull() ||
-        (type != SurfaceParams::SurfaceType::Color && type != SurfaceParams::SurfaceType::Texture))
+bool TextureFilterer::Filter(const OGLTexture& src_tex, Common::Rectangle<u32> src_rect,
+                             const OGLTexture& dst_tex, Common::Rectangle<u32> dst_rect,
+                             SurfaceType type) {
+
+    // Depth/Stencil texture filtering is not supported for now
+    if (IsNull() || (type != SurfaceType::Color && type != SurfaceType::Texture)) {
         return false;
-    filter->Filter(src_tex, src_rect, dst_tex, dst_rect, read_fb_handle, draw_fb_handle);
+    }
+
+    filter->Filter(src_tex, src_rect, dst_tex, dst_rect);
     return true;
 }
 
@@ -82,6 +85,7 @@ std::vector<std::string_view> TextureFilterer::GetFilterNames() {
             return lhs_is_none && !rhs_is_none;
         return lhs < rhs;
     });
+
     return ret;
 }
 

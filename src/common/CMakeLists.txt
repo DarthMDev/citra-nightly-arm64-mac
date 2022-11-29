@@ -32,6 +32,8 @@ add_custom_command(OUTPUT scm_rev.cpp
       "${VIDEO_CORE}/renderer_opengl/gl_shader_disk_cache.h"
       "${VIDEO_CORE}/renderer_opengl/gl_shader_gen.cpp"
       "${VIDEO_CORE}/renderer_opengl/gl_shader_gen.h"
+      "${VIDEO_CORE}/renderer_opengl/gl_shader_util.cpp"
+      "${VIDEO_CORE}/renderer_opengl/gl_shader_util.h"
       "${VIDEO_CORE}/shader/shader.cpp"
       "${VIDEO_CORE}/shader/shader.h"
       "${VIDEO_CORE}/pica.cpp"
@@ -56,6 +58,7 @@ add_library(common STATIC
     announce_multiplayer_room.h
     archives.h
     assert.h
+    atomic_ops.h
     detached_tasks.cpp
     detached_tasks.h
     bit_field.h
@@ -71,14 +74,18 @@ add_library(common STATIC
     file_util.h
     hash.h
     linear_disk_cache.h
+    literals.h
     logging/backend.cpp
     logging/backend.h
     logging/filter.cpp
     logging/filter.h
+    logging/formatter.h
     logging/log.h
     logging/text_formatter.cpp
     logging/text_formatter.h
     math_util.h
+    memory_detect.cpp
+    memory_detect.h
     memory_ref.h
     memory_ref.cpp
     microprofile.cpp
@@ -97,6 +104,7 @@ add_library(common STATIC
     serialization/boost_flat_set.h
     serialization/boost_small_vector.hpp
     serialization/boost_vector.hpp
+    string_literal.h
     string_util.cpp
     string_util.h
     swap.h
@@ -125,7 +133,7 @@ if(ARCHITECTURE_x86_64)
             x64/xbyak_abi.h
             x64/xbyak_util.h
     )
-elseif(ARCHITECTURE_ARM64)
+elseif(ARCHITECTURE_arm64)
     target_sources(common
         PRIVATE
             aarch64/cpu_detect.cpp
@@ -135,8 +143,10 @@ endif()
 
 create_target_directory_groups(common)
 
-target_link_libraries(common PUBLIC fmt microprofile Boost::boost Boost::serialization)
+target_link_libraries(common PUBLIC fmt::fmt microprofile Boost::boost Boost::serialization)
 target_link_libraries(common PRIVATE libzstd_static)
+set_target_properties(common PROPERTIES INTERPROCEDURAL_OPTIMIZATION ${ENABLE_LTO})
+
 if (ARCHITECTURE_x86_64)
     target_link_libraries(common PRIVATE xbyak)
 endif()

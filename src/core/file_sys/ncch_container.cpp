@@ -247,7 +247,12 @@ Loader::ResultStatus NCCHContainer::Load() {
                 switch (ncch_header.secondary_key_slot) {
                 case 0:
                     LOG_DEBUG(Service_FS, "Secure1 crypto");
-                    secondary_key = primary_key;
+                    SetKeyY(KeySlotID::NCCHSecure1, key_y_secondary);
+                    if (!IsNormalKeyAvailable(KeySlotID::NCCHSecure1)) {
+                        LOG_ERROR(Service_FS, "Secure1 KeyX missing");
+                        failed_to_decrypt = true;
+                    }
+                    secondary_key = GetNormalKey(KeySlotID::NCCHSecure1);
                     break;
                 case 1:
                     LOG_DEBUG(Service_FS, "Secure2 crypto");
@@ -390,7 +395,7 @@ Loader::ResultStatus NCCHContainer::Load() {
                 exheader_header.arm11_system_local_caps.resource_limit_category;
 
             LOG_DEBUG(Service_FS, "Name:                        {}",
-                      exheader_header.codeset_info.name);
+                      reinterpret_cast<const char*>(exheader_header.codeset_info.name));
             LOG_DEBUG(Service_FS, "Program ID:                  {:016X}", ncch_header.program_id);
             LOG_DEBUG(Service_FS, "Code compressed:             {}", is_compressed ? "yes" : "no");
             LOG_DEBUG(Service_FS, "Entry point:                 0x{:08X}", entry_point);

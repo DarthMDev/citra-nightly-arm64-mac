@@ -45,6 +45,16 @@ static std::chrono::seconds GetInitTime() {
         std::tm* now_tm = std::localtime(&now_time_t);
         if (now_tm && now_tm->tm_isdst > 0)
             now = now + std::chrono::hours(1);
+
+        // add the offset
+        s64 init_time_offset = Settings::values.init_time_offset;
+        long long days_offset = init_time_offset / 86400;
+        long long days_offset_in_seconds = days_offset * 86400; // h/m/s truncated
+        unsigned long long seconds_offset =
+            std::abs(init_time_offset) - std::abs(days_offset_in_seconds);
+
+        now = now + std::chrono::seconds(seconds_offset);
+        now = now + std::chrono::seconds(days_offset_in_seconds);
         return std::chrono::duration_cast<std::chrono::seconds>(now.time_since_epoch());
     }
     case Settings::InitClock::FixedTime:
@@ -94,7 +104,7 @@ u64 Handler::GetSystemTime() const {
     epoch_tm.tm_mon = 0;
     epoch_tm.tm_year = 100;
     epoch_tm.tm_isdst = 0;
-    u64 epoch = std::mktime(&epoch_tm) * 1000;
+    s64 epoch = std::mktime(&epoch_tm) * 1000;
 
     // 3DS console time uses Jan 1 1900 as internal epoch,
     // so we use the milliseconds between 1900 and 2000 as base console time
@@ -108,7 +118,7 @@ u64 Handler::GetSystemTime() const {
     return console_time;
 }
 
-void Handler::UpdateTimeCallback(u64 userdata, int cycles_late) {
+void Handler::UpdateTimeCallback(std::uintptr_t user_data, int cycles_late) {
     DateTime& date_time =
         shared_page.date_time_counter % 2 ? shared_page.date_time_0 : shared_page.date_time_1;
 

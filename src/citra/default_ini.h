@@ -166,6 +166,10 @@ render_3d =
 # 0 - 100: Intensity. 0 (default)
 factor_3d =
 
+# Change Default Eye to Render When in Monoscopic Mode
+# 0 (default): Right, 1: Left
+mono_render_left_eye =
+
 # The name of the post processing shader to apply.
 # Loaded from shaders if render_3d is off or side by side.
 # Loaded from shaders/anaglyph if render_3d is anaglyph
@@ -178,7 +182,11 @@ filter_mode =
 
 [Layout]
 # Layout for the screen inside the render window.
-# 0 (default): Default Top Bottom Screen, 1: Single Screen Only, 2: Large Screen Small Screen, 3: Side by Side
+# 0 (default): Default Top Bottom Screen
+# 1: Single Screen Only
+# 2: Large Screen Small Screen
+# 3: Side by Side
+# 4: Separate Windows
 layout_option =
 
 # Toggle custom layout (using the settings below) on or off.
@@ -249,6 +257,10 @@ volume =
 # Whether to create a virtual SD card.
 # 1 (default): Yes, 0: No
 use_virtual_sd =
+
+# Whether to use custom storage locations
+# 1: Yes, 0 (default): No
+use_custom_storage =
 
 # The path of the virtual SD card directory.
 # empty (default) will use the user_path

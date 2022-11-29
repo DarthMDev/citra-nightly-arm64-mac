@@ -12,6 +12,8 @@ add_library(core STATIC
     arm/dyncom/arm_dyncom_thumb.h
     arm/dyncom/arm_dyncom_trans.cpp
     arm/dyncom/arm_dyncom_trans.h
+    arm/exclusive_monitor.cpp
+    arm/exclusive_monitor.h
     arm/skyeye_common/arm_regformat.h
     arm/skyeye_common/armstate.cpp
     arm/skyeye_common/armstate.h
@@ -471,7 +473,8 @@ endif()
 create_target_directory_groups(core)
 
 target_link_libraries(core PUBLIC common PRIVATE audio_core network video_core)
-target_link_libraries(core PUBLIC Boost::boost PRIVATE cryptopp fmt open_source_archives Boost::serialization)
+target_link_libraries(core PUBLIC Boost::boost PRIVATE cryptopp fmt::fmt open_source_archives Boost::serialization)
+set_target_properties(core PROPERTIES INTERPROCEDURAL_OPTIMIZATION ${ENABLE_LTO})
 
 if (ENABLE_WEB_SERVICE)
     target_compile_definitions(core PRIVATE -DENABLE_WEB_SERVICE -DCPPHTTPLIB_OPENSSL_SUPPORT)
@@ -481,12 +484,16 @@ if (ENABLE_WEB_SERVICE)
     endif()
 endif()
 
-if (ARCHITECTURE_x86_64 OR ARCHITECTURE_ARM64)
+if (ARCHITECTURE_x86_64 OR ARCHITECTURE_arm64)
     target_sources(core PRIVATE
         arm/dynarmic/arm_dynarmic.cpp
         arm/dynarmic/arm_dynarmic.h
         arm/dynarmic/arm_dynarmic_cp15.cpp
         arm/dynarmic/arm_dynarmic_cp15.h
+        arm/dynarmic/arm_exclusive_monitor.cpp
+        arm/dynarmic/arm_exclusive_monitor.h
+        arm/dynarmic/arm_tick_counts.cpp
+        arm/dynarmic/arm_tick_counts.h
     )
     target_link_libraries(core PRIVATE dynarmic)
 endif()

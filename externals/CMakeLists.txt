@@ -23,31 +23,34 @@ target_link_libraries(boost_serialization PUBLIC boost)
 
 # Add additional boost libs here; remember to ALIAS them in the root CMakeLists!
 
-# Catch
-add_library(catch-single-include INTERFACE)
-target_include_directories(catch-single-include INTERFACE catch/single_include)
+# Catch2
+set(CATCH_INSTALL_DOCS OFF)
+set(CATCH_INSTALL_EXTRAS OFF)
+add_subdirectory(catch2)
 
 # Crypto++
 add_subdirectory(cryptopp)
 
+# fmt and Xbyak need to be added before dynarmic
+# libfmt
+add_subdirectory(fmt)
+
 # Xbyak
 if (ARCHITECTURE_x86_64)
     add_library(xbyak INTERFACE)
-    target_include_directories(xbyak SYSTEM INTERFACE ./xbyak/xbyak)
+    file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/xbyak/include)
+    file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/xbyak/xbyak DESTINATION ${CMAKE_CURRENT_BINARY_DIR}/xbyak/include)
+    target_include_directories(xbyak SYSTEM INTERFACE ${CMAKE_CURRENT_BINARY_DIR}/xbyak/include)
     target_compile_definitions(xbyak INTERFACE XBYAK_NO_OP_NAMES)
 endif()
 
 # Dynarmic
-if (ARCHITECTURE_x86_64 OR ARCHITECTURE_ARM64)
+if (ARCHITECTURE_x86_64 OR ARCHITECTURE_arm64)
     set(DYNARMIC_TESTS OFF)
     set(DYNARMIC_NO_BUNDLED_FMT ON)
     set(DYNARMIC_FRONTENDS "A32")
     add_subdirectory(dynarmic)
 endif()
-
-# libfmt
-add_subdirectory(fmt)
-add_library(fmt::fmt ALIAS fmt)
 
 # getopt
 if (MSVC)
@@ -79,7 +82,15 @@ target_include_directories(SoundTouch INTERFACE ./soundtouch/include)
 # Teakra
 add_subdirectory(teakra EXCLUDE_FROM_ALL)
 
+# SDL2
+if (ENABLE_SDL2 AND NOT USE_SYSTEM_SDL2)
+    add_subdirectory(sdl2)
+endif()
+
 # Zstandard
+set(ZSTD_LEGACY_SUPPORT OFF)
+set(ZSTD_BUILD_PROGRAMS OFF)
+set(ZSTD_BUILD_SHARED OFF)
 add_subdirectory(zstd/build/cmake EXCLUDE_FROM_ALL)
 target_include_directories(libzstd_static INTERFACE $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/externals/zstd/lib>)
 

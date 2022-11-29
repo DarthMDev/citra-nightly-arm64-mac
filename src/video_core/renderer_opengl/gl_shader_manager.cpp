@@ -1,16 +1,17 @@
-// Copyright 2018 Citra Emulator Project
+// Copyright 2022 Citra Emulator Project
 // Licensed under GPLv2 or any later version
 // Refer to the license.txt file included.
 
 #include <algorithm>
+#include <set>
 #include <thread>
 #include <unordered_map>
-#include <boost/functional/hash.hpp>
 #include <boost/variant.hpp>
-#include "core/core.h"
 #include "core/frontend/scope_acquire_context.h"
+#include "video_core/renderer_opengl/gl_resource_manager.h"
 #include "video_core/renderer_opengl/gl_shader_disk_cache.h"
 #include "video_core/renderer_opengl/gl_shader_manager.h"
+#include "video_core/renderer_opengl/gl_state.h"
 #include "video_core/renderer_opengl/gl_vars.h"
 #include "video_core/video_core.h"
 
@@ -19,12 +20,14 @@ namespace OpenGL {
 static u64 GetUniqueIdentifier(const Pica::Regs& regs, const ProgramCode& code) {
     std::size_t hash = 0;
     u64 regs_uid = Common::ComputeHash64(regs.reg_array.data(), Pica::Regs::NUM_REGS * sizeof(u32));
-    boost::hash_combine(hash, regs_uid);
+    hash = Common::HashCombine(hash, regs_uid);
+
     if (code.size() > 0) {
         u64 code_uid = Common::ComputeHash64(code.data(), code.size() * sizeof(u32));
-        boost::hash_combine(hash, code_uid);
+        hash = Common::HashCombine(hash, code_uid);
     }
-    return static_cast<u64>(hash);
+
+    return hash;
 }
 
 static OGLProgram GeneratePrecompiledProgram(const ShaderDiskCacheDump& dump,
@@ -90,8 +93,9 @@ static void SetShaderUniformBlockBinding(GLuint shader, const char* name, Unifor
     }
     GLint ub_size = 0;
     glGetActiveUniformBlockiv(shader, ub_index, GL_UNIFORM_BLOCK_DATA_SIZE, &ub_size);
-    ASSERT_MSG(ub_size == expected_size, "Uniform block size did not match! Got {}, expected {}",
-               static_cast<int>(ub_size), expected_size);
+    ASSERT_MSG(static_cast<std::size_t>(ub_size) == expected_size,
+               "Uniform block size did not match! Got {}, expected {}", static_cast<int>(ub_size),
+               expected_size);
     glUniformBlockBinding(shader, ub_index, static_cast<GLuint>(binding));
 }
 
@@ -149,11 +153,11 @@ void PicaUniformsData::SetFromRegs(const Pica::ShaderRegs& regs,
     std::transform(std::begin(setup.uniforms.b), std::end(setup.uniforms.b), std::begin(bools),
                    [](bool value) -> BoolAligned { return {value ? GL_TRUE : GL_FALSE}; });
     std::transform(std::begin(regs.int_uniforms), std::end(regs.int_uniforms), std::begin(i),
-                   [](const auto& value) -> GLuvec4 {
+                   [](const auto& value) -> Common::Vec4u {
                        return {value.x.Value(), value.y.Value(), value.z.Value(), value.w.Value()};
                    });
     std::transform(std::begin(setup.uniforms.f), std::end(setup.uniforms.f), std::begin(f),
-                   [](const auto& value) -> GLvec4 {
+                   [](const auto& value) -> Common::Vec4f {
                        return {value.x.ToFloat32(), value.y.ToFloat32(), value.z.ToFloat32(),
                                value.w.ToFloat32()};
                    });
@@ -334,13 +338,13 @@ public:
     }
 
     struct ShaderTuple {
-        GLuint vs = 0;
-        GLuint gs = 0;
-        GLuint fs = 0;
-
         std::size_t vs_hash = 0;
         std::size_t gs_hash = 0;
         std::size_t fs_hash = 0;
+
+        GLuint vs = 0;
+        GLuint gs = 0;
+        GLuint fs = 0;
 
         bool operator==(const ShaderTuple& rhs) const {
             return std::tie(vs, gs, fs) == std::tie(rhs.vs, rhs.gs, rhs.fs);
@@ -351,13 +355,13 @@ public:
         }
 
         std::size_t GetConfigHash() const {
-            std::size_t hash = 0;
-            boost::hash_combine(hash, vs_hash);
-            boost::hash_combine(hash, gs_hash);
-            boost::hash_combine(hash, fs_hash);
-            return hash;
+            return Common::ComputeHash64(this, sizeof(std::size_t) * 3);
         }
     };
+
+    static_assert(offsetof(ShaderTuple, vs_hash) == 0, "ShaderTuple layout changed!");
+    static_assert(offsetof(ShaderTuple, fs_hash) == sizeof(std::size_t) * 2,
+                  "ShaderTuple layout changed!");
 
     bool is_amd;
     bool separable;
@@ -471,12 +475,6 @@ void ShaderProgramManager::ApplyTo(OpenGLState& state) {
 
 void ShaderProgramManager::LoadDiskCache(const std::atomic_bool& stop_loading,
                                          const VideoCore::DiskResourceLoadCallback& callback) {
-    if (!GLAD_GL_ARB_get_program_binary && !GLES) {
-        LOG_ERROR(Render_OpenGL,
-                  "Cannot load disk cache as ARB_get_program_binary is not supported!");
-        return;
-    }
-
     auto& disk_cache = impl->disk_cache;
     const auto transferable = disk_cache.LoadTransferable();
     if (!transferable) {

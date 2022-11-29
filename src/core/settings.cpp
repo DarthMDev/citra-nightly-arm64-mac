@@ -22,7 +22,6 @@ namespace Settings {
 Values values = {};
 
 void Apply() {
-
     GDBStub::SetServerPort(values.gdbstub_port);
     GDBStub::ToggleServer(values.use_gdbstub);
 
@@ -96,6 +95,7 @@ void LogSettings() {
     log_setting("Renderer_TextureFilterName", values.texture_filter_name);
     log_setting("Stereoscopy_Render3d", values.render_3d);
     log_setting("Stereoscopy_Factor3d", values.factor_3d);
+    log_setting("Stereoscopy_MonoRenderLeftEye", values.mono_render_left_eye);
     log_setting("Layout_LayoutOption", values.layout_option);
     log_setting("Layout_SwapScreen", values.swap_screen);
     log_setting("Layout_UprightScreen", values.upright_screen);
@@ -120,12 +120,22 @@ void LogSettings() {
     log_setting("Camera_OuterLeftConfig", values.camera_config[OuterLeftCamera]);
     log_setting("Camera_OuterLeftFlip", values.camera_flip[OuterLeftCamera]);
     log_setting("DataStorage_UseVirtualSd", values.use_virtual_sd);
-    log_setting("DataStorage_SdmcDir", FileUtil::GetUserPath(FileUtil::UserPath::SDMCDir));
-    log_setting("DataStorage_NandDir", FileUtil::GetUserPath(FileUtil::UserPath::NANDDir));
+    log_setting("DataStorage_UseCustomStorage", values.use_custom_storage);
+    if (values.use_custom_storage) {
+        log_setting("DataStorage_SdmcDir", FileUtil::GetUserPath(FileUtil::UserPath::SDMCDir));
+        log_setting("DataStorage_NandDir", FileUtil::GetUserPath(FileUtil::UserPath::NANDDir));
+    }
     log_setting("System_IsNew3ds", values.is_new_3ds);
     log_setting("System_RegionValue", values.region_value);
     log_setting("Debugging_UseGdbstub", values.use_gdbstub);
     log_setting("Debugging_GdbstubPort", values.gdbstub_port);
+}
+
+float Volume() {
+    if (values.audio_muted) {
+        return 0.0f;
+    }
+    return values.volume;
 }
 
 void LoadProfile(int index) {

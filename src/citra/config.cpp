@@ -137,6 +137,8 @@ void Config::ReadValues() {
     Settings::values.texture_filter_name =
         sdl2_config->GetString("Renderer", "texture_filter_name", "none");
 
+    Settings::values.mono_render_left_eye =
+        sdl2_config->GetBoolean("Renderer", "mono_render_left_eye", true);
     Settings::values.render_3d = static_cast<Settings::StereoRenderOption>(
         sdl2_config->GetInteger("Renderer", "render_3d", 0));
     Settings::values.factor_3d =
@@ -203,14 +205,15 @@ void Config::ReadValues() {
     Settings::values.use_virtual_sd =
         sdl2_config->GetBoolean("Data Storage", "use_virtual_sd", true);
 
-    const std::string default_nand_dir = FileUtil::GetDefaultUserPath(FileUtil::UserPath::NANDDir);
-    FileUtil::UpdateUserPath(
-        FileUtil::UserPath::NANDDir,
-        sdl2_config->GetString("Data Storage", "nand_directory", default_nand_dir));
-    const std::string default_sdmc_dir = FileUtil::GetDefaultUserPath(FileUtil::UserPath::SDMCDir);
-    FileUtil::UpdateUserPath(
-        FileUtil::UserPath::SDMCDir,
-        sdl2_config->GetString("Data Storage", "sdmc_directory", default_sdmc_dir));
+    Settings::values.use_custom_storage =
+        sdl2_config->GetBoolean("Data Storage", "use_custom_storage", false);
+
+    if (Settings::values.use_custom_storage) {
+        FileUtil::UpdateUserPath(FileUtil::UserPath::NANDDir,
+                                 sdl2_config->GetString("Data Storage", "nand_directory", ""));
+        FileUtil::UpdateUserPath(FileUtil::UserPath::SDMCDir,
+                                 sdl2_config->GetString("Data Storage", "sdmc_directory", ""));
+    }
 
     // System
     Settings::values.is_new_3ds = sdl2_config->GetBoolean("System", "is_new_3ds", true);
@@ -237,6 +240,58 @@ void Config::ReadValues() {
             std::chrono::duration_cast<std::chrono::seconds>(
                 std::chrono::system_clock::from_time_t(std::mktime(&t)).time_since_epoch())
                 .count();
+    }
+
+    {
+        constexpr const char* default_init_time_offset = "0 00:00:00";
+
+        std::string offset_string =
+            sdl2_config->GetString("System", "init_time_offset", default_init_time_offset);
+
+        size_t sep_index = offset_string.find(' ');
+
+        if (sep_index == std::string::npos) {
+            LOG_ERROR(Config, "Failed to parse init_time_offset. Using 0 00:00:00");
+            offset_string = default_init_time_offset;
+
+            sep_index = offset_string.find(' ');
+        }
+
+        std::string day_string = offset_string.substr(0, sep_index);
+        long long days = 0;
+
+        try {
+            days = std::stoll(day_string);
+        } catch (std::logic_error&) {
+            LOG_ERROR(Config, "Failed to parse days in init_time_offset. Using 0");
+            days = 0;
+        }
+
+        long long days_in_seconds = days * 86400;
+
+        std::tm t;
+        t.tm_sec = 0;
+        t.tm_min = 0;
+        t.tm_hour = 0;
+        t.tm_mday = 1;
+        t.tm_mon = 0;
+        t.tm_year = 100;
+        t.tm_isdst = 0;
+
+        std::istringstream string_stream(offset_string.substr(sep_index + 1));
+        string_stream >> std::get_time(&t, "%H:%M:%S");
+
+        if (string_stream.fail()) {
+            LOG_ERROR(Config,
+                      "Failed to parse hours, minutes and seconds in init_time_offset. 00:00:00");
+        }
+
+        auto time_offset =
+            std::chrono::system_clock::from_time_t(std::mktime(&t)).time_since_epoch();
+
+        auto secs = std::chrono::duration_cast<std::chrono::seconds>(time_offset).count();
+
+        Settings::values.init_time_offset = static_cast<long long>(secs) + days_in_seconds;
     }
 
     // Camera

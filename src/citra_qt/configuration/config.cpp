@@ -58,7 +58,7 @@ const std::array<std::array<int, 5>, Settings::NativeAnalog::NumAnalogs> Config:
 // This must be in alphabetical order according to action name as it must have the same order as
 // UISetting::values.shortcuts, which is alphabetically ordered.
 // clang-format off
-const std::array<UISettings::Shortcut, 23> default_hotkeys{
+const std::array<UISettings::Shortcut, 24> default_hotkeys{
     {{QStringLiteral("Advance Frame"),            QStringLiteral("Main Window"), {QStringLiteral("\\"), Qt::ApplicationShortcut}},
      {QStringLiteral("Capture Screenshot"),       QStringLiteral("Main Window"), {QStringLiteral("Ctrl+P"), Qt::ApplicationShortcut}},
      {QStringLiteral("Continue/Pause Emulation"), QStringLiteral("Main Window"), {QStringLiteral("F4"), Qt::WindowShortcut}},
@@ -70,6 +70,7 @@ const std::array<UISettings::Shortcut, 23> default_hotkeys{
      {QStringLiteral("Load Amiibo"),              QStringLiteral("Main Window"), {QStringLiteral("F2"), Qt::ApplicationShortcut}},
      {QStringLiteral("Load File"),                QStringLiteral("Main Window"), {QStringLiteral("Ctrl+O"), Qt::WindowShortcut}},
      {QStringLiteral("Load from Newest Slot"),    QStringLiteral("Main Window"), {QStringLiteral("Ctrl+V"), Qt::WindowShortcut}},
+     {QStringLiteral("Mute Audio"),               QStringLiteral("Main Window"), {QStringLiteral("Ctrl+M"), Qt::WindowShortcut}},
      {QStringLiteral("Remove Amiibo"),            QStringLiteral("Main Window"), {QStringLiteral("F3"), Qt::ApplicationShortcut}},
      {QStringLiteral("Restart Emulation"),        QStringLiteral("Main Window"), {QStringLiteral("F6"), Qt::WindowShortcut}},
      {QStringLiteral("Rotate Screens Upright"),   QStringLiteral("Main Window"), {QStringLiteral("F8"), Qt::WindowShortcut}},
@@ -304,21 +305,17 @@ void Config::ReadDataStorageValues() {
 
     Settings::values.use_virtual_sd = ReadSetting(QStringLiteral("use_virtual_sd"), true).toBool();
 
+    Settings::values.use_custom_storage =
+        ReadSetting(QStringLiteral("use_custom_storage"), false).toBool();
     const std::string nand_dir =
-        ReadSetting(
-            QStringLiteral("nand_directory"),
-            QString::fromStdString(FileUtil::GetDefaultUserPath(FileUtil::UserPath::NANDDir)))
-            .toString()
-            .toStdString();
+        ReadSetting(QStringLiteral("nand_directory"), QStringLiteral("")).toString().toStdString();
     const std::string sdmc_dir =
-        ReadSetting(
-            QStringLiteral("sdmc_directory"),
-            QString::fromStdString(FileUtil::GetDefaultUserPath(FileUtil::UserPath::SDMCDir)))
-            .toString()
-            .toStdString();
+        ReadSetting(QStringLiteral("sdmc_directory"), QStringLiteral("")).toString().toStdString();
 
-    FileUtil::UpdateUserPath(FileUtil::UserPath::NANDDir, nand_dir);
-    FileUtil::UpdateUserPath(FileUtil::UserPath::SDMCDir, sdmc_dir);
+    if (Settings::values.use_custom_storage) {
+        FileUtil::UpdateUserPath(FileUtil::UserPath::NANDDir, nand_dir);
+        FileUtil::UpdateUserPath(FileUtil::UserPath::SDMCDir, sdmc_dir);
+    }
 
     qt_config->endGroup();
 }
@@ -348,6 +345,8 @@ void Config::ReadLayoutValues() {
     Settings::values.render_3d = static_cast<Settings::StereoRenderOption>(
         ReadSetting(QStringLiteral("render_3d"), 0).toInt());
     Settings::values.factor_3d = ReadSetting(QStringLiteral("factor_3d"), 0).toInt();
+    Settings::values.mono_render_left_eye =
+        ReadSetting(QStringLiteral("mono_render_left_eye"), true).toBool();
     Settings::values.pp_shader_name =
         ReadSetting(QStringLiteral("pp_shader_name"),
                     (Settings::values.render_3d == Settings::StereoRenderOption::Anaglyph)
@@ -521,7 +520,7 @@ void Config::ReadRendererValues() {
 void Config::ReadShortcutValues() {
     qt_config->beginGroup(QStringLiteral("Shortcuts"));
 
-    for (auto [name, group, shortcut] : default_hotkeys) {
+    for (const auto& [name, group, shortcut] : default_hotkeys) {
         auto [keyseq, context] = shortcut;
         qt_config->beginGroup(group);
         qt_config->beginGroup(name);
@@ -548,6 +547,8 @@ void Config::ReadSystemValues() {
             .toInt());
     Settings::values.init_time =
         ReadSetting(QStringLiteral("init_time"), 946681277ULL).toULongLong();
+    Settings::values.init_time_offset =
+        ReadSetting(QStringLiteral("init_time_offset"), 0LL).toLongLong();
 
     qt_config->endGroup();
 }
@@ -556,7 +557,7 @@ void Config::ReadSystemValues() {
 // https://developers.google.com/media/vp9/live-encoding
 const QString DEFAULT_VIDEO_ENCODER_OPTIONS =
     QStringLiteral("quality:realtime,speed:6,tile-columns:4,frame-parallel:1,threads:8,row-mt:1");
-const QString DEFAULT_AUDIO_ENCODER_OPTIONS = QString{};
+const QString DEFAULT_AUDIO_ENCODER_OPTIONS = QStringLiteral("");
 
 void Config::ReadVideoDumpingValues() {
     qt_config->beginGroup(QStringLiteral("VideoDumping"));
@@ -869,12 +870,13 @@ void Config::SaveDataStorageValues() {
     qt_config->beginGroup(QStringLiteral("Data Storage"));
 
     WriteSetting(QStringLiteral("use_virtual_sd"), Settings::values.use_virtual_sd, true);
+    WriteSetting(QStringLiteral("use_custom_storage"), Settings::values.use_custom_storage, false);
     WriteSetting(QStringLiteral("nand_directory"),
                  QString::fromStdString(FileUtil::GetUserPath(FileUtil::UserPath::NANDDir)),
-                 QString::fromStdString(FileUtil::GetDefaultUserPath(FileUtil::UserPath::NANDDir)));
+                 QStringLiteral(""));
     WriteSetting(QStringLiteral("sdmc_directory"),
                  QString::fromStdString(FileUtil::GetUserPath(FileUtil::UserPath::SDMCDir)),
-                 QString::fromStdString(FileUtil::GetDefaultUserPath(FileUtil::UserPath::SDMCDir)));
+                 QStringLiteral(""));
 
     qt_config->endGroup();
 }
@@ -901,6 +903,8 @@ void Config::SaveLayoutValues() {
 
     WriteSetting(QStringLiteral("render_3d"), static_cast<int>(Settings::values.render_3d), 0);
     WriteSetting(QStringLiteral("factor_3d"), Settings::values.factor_3d.load(), 0);
+    WriteSetting(QStringLiteral("mono_render_left_eye"), Settings::values.mono_render_left_eye,
+                 false);
     WriteSetting(QStringLiteral("pp_shader_name"),
                  QString::fromStdString(Settings::values.pp_shader_name),
                  (Settings::values.render_3d == Settings::StereoRenderOption::Anaglyph)
@@ -1015,9 +1019,9 @@ void Config::SaveRendererValues() {
                  200);
 
     // Cast to double because Qt's written float values are not human-readable
-    WriteSetting(QStringLiteral("bg_red"), (double)Settings::values.bg_red, 0.0);
-    WriteSetting(QStringLiteral("bg_green"), (double)Settings::values.bg_green, 0.0);
-    WriteSetting(QStringLiteral("bg_blue"), (double)Settings::values.bg_blue, 0.0);
+    WriteSetting(QStringLiteral("bg_red"), static_cast<double>(Settings::values.bg_red), 0.0);
+    WriteSetting(QStringLiteral("bg_green"), static_cast<double>(Settings::values.bg_green), 0.0);
+    WriteSetting(QStringLiteral("bg_blue"), static_cast<double>(Settings::values.bg_blue), 0.0);
 
     WriteSetting(QStringLiteral("texture_filter_name"),
                  QString::fromStdString(Settings::values.texture_filter_name),
@@ -1055,6 +1059,8 @@ void Config::SaveSystemValues() {
                  static_cast<u32>(Settings::InitClock::SystemTime));
     WriteSetting(QStringLiteral("init_time"),
                  static_cast<unsigned long long>(Settings::values.init_time), 946681277ULL);
+    WriteSetting(QStringLiteral("init_time_offset"),
+                 static_cast<long long>(Settings::values.init_time_offset), 0LL);
 
     qt_config->endGroup();
 }

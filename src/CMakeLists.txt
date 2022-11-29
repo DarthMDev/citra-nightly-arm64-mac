@@ -32,27 +32,63 @@ if (MSVC)
     # /Zc:inline          - Let codegen omit inline functions in object files
     # /Zc:throwingNew     - Let codegen assume `operator new` (without std::nothrow) will never return null
     # /external:*         - Suppress warnings from external headers
-    add_compile_options(
-        /MP
-        /permissive-
-        /EHsc
-        /volatile:iso
-        /Zc:externConstexpr
-        /Zc:inline
-        /Zc:throwingNew
-        /experimental:external
-        /external:I "${CMAKE_SOURCE_DIR}/externals"
-        /external:anglebrackets
-        /external:W0
+    if (CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+        # Ignore /Zc:externConstexpr /Zc:throwingNew /experimental:external when using clang-cl
+        add_compile_options(
+            /MP
+            /permissive-
+            /EHsc
+            /volatile:iso
+            /Zc:inline
+            /external:I "${CMAKE_SOURCE_DIR}/externals"
+            /external:anglebrackets
+            /external:W0
 
-        # Warnings
-        /W3
-        /we4267 # 'var': conversion from 'size_t' to 'type', possible loss of data
-    )
+            # Warnings
+            /W3
+            /we4062 # enumerator 'identifier' in a switch of enum 'enumeration' is not handled
+            /we4101 # 'identifier': unreferenced local variable
+            /we4265 # 'class': class has virtual functions, but destructor is not virtual
+            /we4267 # 'var': conversion from 'size_t' to 'type', possible loss of data
+            /we4388 # signed/unsigned mismatch
+            /we4547 # 'operator' : operator before comma has no effect; expected operator with side-effect
+            /we4549 # 'operator1': operator before comma has no effect; did you intend 'operator2'?
+            /we4555 # Expression has no effect; expected expression with side-effect
+            /we4834 # Discarding return value of function with 'nodiscard' attribute
+            /we5038 # data member 'member1' will be initialized after data member 'member2'
+        )
+    else()
+        add_compile_options(
+            /MP
+            /permissive-
+            /EHsc
+            /volatile:iso
+            /Zc:externConstexpr
+            /Zc:inline
+            /Zc:throwingNew
+            /experimental:external
+            /external:I "${CMAKE_SOURCE_DIR}/externals"
+            /external:anglebrackets
+            /external:W0
+
+            # Warnings
+            /W3
+            /we4062 # enumerator 'identifier' in a switch of enum 'enumeration' is not handled
+            /we4101 # 'identifier': unreferenced local variable
+            /we4265 # 'class': class has virtual functions, but destructor is not virtual
+            /we4267 # 'var': conversion from 'size_t' to 'type', possible loss of data
+            /we4388 # signed/unsigned mismatch
+            /we4547 # 'operator' : operator before comma has no effect; expected operator with side-effect
+            /we4549 # 'operator1': operator before comma has no effect; did you intend 'operator2'?
+            /we4555 # Expression has no effect; expected expression with side-effect
+            /we4834 # Discarding return value of function with 'nodiscard' attribute
+            /we5038 # data member 'member1' will be initialized after data member 'member2'
+        )
+    endif()
 
     # Since MSVC's debugging information is not very deterministic, so we have to disable it
     # when using ccache or other caching tools
-    if (NOT USE_CCACHE)
+    if (NOT CITRA_USE_CCACHE)
         add_compile_options(
             /Zi
             /Zo

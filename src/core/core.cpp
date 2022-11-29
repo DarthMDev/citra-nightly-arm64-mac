@@ -13,7 +13,8 @@
 #include "common/logging/log.h"
 #include "common/texture.h"
 #include "core/arm/arm_interface.h"
-#if defined(ARCHITECTURE_x86_64) || defined(ARCHITECTURE_ARM64)
+#include "core/arm/exclusive_monitor.h"
+#if defined(ARCHITECTURE_x86_64) || defined(ARCHITECTURE_arm64)
 #include "core/arm/dynarmic/arm_dynarmic.h"
 #endif
 #include "core/arm/dyncom/arm_dyncom.h"
@@ -246,7 +247,8 @@ System::ResultStatus System::SingleStep() {
     return RunLoop(false);
 }
 
-System::ResultStatus System::Load(Frontend::EmuWindow& emu_window, const std::string& filepath) {
+System::ResultStatus System::Load(Frontend::EmuWindow& emu_window, const std::string& filepath,
+                                  Frontend::EmuWindow* secondary_window) {
     FileUtil::SetCurrentRomPath(filepath);
     app_loader = Loader::GetLoader(filepath);
     if (!app_loader) {
@@ -277,7 +279,8 @@ System::ResultStatus System::Load(Frontend::EmuWindow& emu_window, const std::st
     if (Settings::values.is_new_3ds) {
         num_cores = 4;
     }
-    ResultStatus init_result{Init(emu_window, *system_mode.first, *n3ds_mode.first, num_cores)};
+    ResultStatus init_result{
+        Init(emu_window, secondary_window, *system_mode.first, *n3ds_mode.first, num_cores)};
     if (init_result != ResultStatus::Success) {
         LOG_CRITICAL(Core, "Failed to initialize system (Error {})!",
                      static_cast<u32>(init_result));
@@ -323,10 +326,12 @@ System::ResultStatus System::Load(Frontend::EmuWindow& emu_window, const std::st
 
     status = ResultStatus::Success;
     m_emu_window = &emu_window;
+    m_secondary_window = secondary_window;
     m_filepath = filepath;
+    self_delete_pending = false;
 
     // Reset counters and set time origin to current frame
-    GetAndResetPerfStats();
+    [[maybe_unused]] const PerfStats::Results result = GetAndResetPerfStats();
     perf_stats->BeginSystemFrame();
     return status;
 }
@@ -353,8 +358,9 @@ void System::Reschedule() {
     }
 }
 
-System::ResultStatus System::Init(Frontend::EmuWindow& emu_window, u32 system_mode, u8 n3ds_mode,
-                                  u32 num_cores) {
+System::ResultStatus System::Init(Frontend::EmuWindow& emu_window,
+                                  Frontend::EmuWindow* secondary_window, u32 system_mode,
+                                  u8 n3ds_mode, u32 num_cores) {
     LOG_DEBUG(HW_Memory, "initialized OK");
 
     memory = std::make_unique<Memory::MemorySystem>();
@@ -364,11 +370,12 @@ System::ResultStatus System::Init(Frontend::EmuWindow& emu_window, u32 system_mo
     kernel = std::make_unique<Kernel::KernelSystem>(
         *memory, *timing, [this] { PrepareReschedule(); }, system_mode, num_cores, n3ds_mode);
 
+    exclusive_monitor = MakeExclusiveMonitor(*memory, num_cores);
     if (Settings::values.use_cpu_jit) {
-#if defined(ARCHITECTURE_x86_64) || defined(ARCHITECTURE_ARM64)
+#if defined(ARCHITECTURE_x86_64) || defined(ARCHITECTURE_arm64)
         for (u32 i = 0; i < num_cores; ++i) {
-            cpu_cores.push_back(
-                std::make_shared<ARM_Dynarmic>(this, *memory, i, timing->GetTimer(i)));
+            cpu_cores.push_back(std::make_shared<ARM_Dynarmic>(
+                this, *memory, i, timing->GetTimer(i), *exclusive_monitor));
         }
 #else
         for (u32 i = 0; i < num_cores; ++i) {
@@ -417,13 +424,13 @@ System::ResultStatus System::Init(Frontend::EmuWindow& emu_window, u32 system_mo
     video_dumper = std::make_unique<VideoDumper::NullBackend>();
 #endif
 
-    VideoCore::ResultStatus result = VideoCore::Init(emu_window, *memory);
+    VideoCore::ResultStatus result = VideoCore::Init(emu_window, secondary_window, *memory);
     if (result != VideoCore::ResultStatus::Success) {
         switch (result) {
         case VideoCore::ResultStatus::ErrorGenericDrivers:
             return ResultStatus::ErrorVideoCore_ErrorGenericDrivers;
-        case VideoCore::ResultStatus::ErrorBelowGL33:
-            return ResultStatus::ErrorVideoCore_ErrorBelowGL33;
+        case VideoCore::ResultStatus::ErrorBelowGL43:
+            return ResultStatus::ErrorVideoCore_ErrorBelowGL43;
         default:
             return ResultStatus::ErrorVideoCore;
         }
@@ -543,6 +550,7 @@ void System::Shutdown(bool is_deserializing) {
     dsp_core.reset();
     kernel.reset();
     cpu_cores.clear();
+    exclusive_monitor.reset();
     timing.reset();
 
     if (video_dumper && video_dumper->IsDumping()) {
@@ -555,6 +563,10 @@ void System::Shutdown(bool is_deserializing) {
     }
 
     memory.reset();
+
+    if (self_delete_pending)
+        FileUtil::Delete(m_filepath);
+    self_delete_pending = false;
 
     LOG_DEBUG(Core, "Shutdown OK");
 }
@@ -571,8 +583,15 @@ void System::Reset() {
     }
 
     Shutdown();
+
+    if (!m_chainloadpath.empty()) {
+        m_filepath = m_chainloadpath;
+        m_chainloadpath.clear();
+    }
+
     // Reload the system with the same setting
-    Load(*m_emu_window, m_filepath);
+    [[maybe_unused]] const System::ResultStatus result =
+        Load(*m_emu_window, m_filepath, m_secondary_window);
 
     // Restore the deliver arg.
     if (auto apt = Service::APT::GetModule(*this)) {
@@ -597,7 +616,8 @@ void System::serialize(Archive& ar, const unsigned int file_version) {
         // Re-initialize everything like it was before
         auto system_mode = this->app_loader->LoadKernelSystemMode();
         auto n3ds_mode = this->app_loader->LoadKernelN3dsMode();
-        Init(*m_emu_window, *system_mode.first, *n3ds_mode.first, num_cores);
+        [[maybe_unused]] const System::ResultStatus result = Init(
+            *m_emu_window, m_secondary_window, *system_mode.first, *n3ds_mode.first, num_cores);
     }
 
     // flush on save, don't flush on load

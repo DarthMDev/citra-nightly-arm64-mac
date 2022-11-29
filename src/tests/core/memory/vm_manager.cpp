@@ -3,14 +3,14 @@
 // Refer to the license.txt file included.
 
 #include <vector>
-#include <catch2/catch.hpp>
+#include <catch2/catch_test_macros.hpp>
 #include "core/hle/kernel/errors.h"
 #include "core/hle/kernel/memory.h"
 #include "core/hle/kernel/vm_manager.h"
 #include "core/memory.h"
 
 TEST_CASE("Memory Basics", "[kernel][memory]") {
-    auto mem = std::make_shared<BufferMem>(Memory::PAGE_SIZE);
+    auto mem = std::make_shared<BufferMem>(Memory::CITRA_PAGE_SIZE);
     MemoryRef block{mem};
     Memory::MemorySystem memory;
     SECTION("mapping memory") {

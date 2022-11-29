@@ -56,6 +56,7 @@ void Shutdown() {
     Input::UnregisterFactory<Input::AnalogDevice>("analog_from_button");
     Input::UnregisterFactory<Input::MotionDevice>("motion_emu");
     motion_emu.reset();
+    Input::UnregisterFactory<Input::TouchDevice>("emu_window");
     Input::UnregisterFactory<Input::TouchDevice>("touch_from_button");
     sdl.reset();
     udp.reset();
@@ -118,8 +119,10 @@ Common::ParamPackage GetControllerAnalogBinds(const Common::ParamPackage& params
 }
 
 void ReloadInputDevices() {
-    if (udp)
-        udp->ReloadUDPClient();
+    if (!udp) {
+        return;
+    }
+    udp->ReloadUDPClient();
 }
 
 namespace Polling {

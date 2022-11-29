@@ -11,7 +11,7 @@
 #include <QFutureWatcher>
 #include <QLabel>
 #include <QMessageBox>
-#include <QOpenGLFunctions_3_3_Core>
+#include <QOpenGLFunctions_4_3_Core>
 #include <QSysInfo>
 #include <QtConcurrent/QtConcurrentRun>
 #include <QtGui>
@@ -61,10 +61,12 @@
 #include "common/common_paths.h"
 #include "common/detached_tasks.h"
 #include "common/file_util.h"
+#include "common/literals.h"
 #include "common/logging/backend.h"
 #include "common/logging/filter.h"
 #include "common/logging/log.h"
 #include "common/logging/text_formatter.h"
+#include "common/memory_detect.h"
 #include "common/microprofile.h"
 #include "common/scm_rev.h"
 #include "common/scope_exit.h"
@@ -85,6 +87,7 @@
 #include "core/savestate.h"
 #include "core/settings.h"
 #include "game_list_p.h"
+#include "input_common/main.h"
 #include "network/network_settings.h"
 #include "ui_main.h"
 #include "video_core/renderer_base.h"
@@ -152,8 +155,8 @@ static void InitializeLogging() {
 }
 
 GMainWindow::GMainWindow()
-    : config(std::make_unique<Config>()), emu_thread(nullptr),
-      ui(std::make_unique<Ui::MainWindow>()) {
+    : ui{std::make_unique<Ui::MainWindow>()}, config{std::make_unique<Config>()}, emu_thread{
+                                                                                      nullptr} {
     InitializeLogging();
     Debugger::ToggleConsole();
     Settings::LogSettings();
@@ -213,6 +216,10 @@ GMainWindow::GMainWindow()
     LOG_INFO(Frontend, "Host CPU: {}", cpu_string);
 #endif
     LOG_INFO(Frontend, "Host OS: {}", QSysInfo::prettyProductName().toStdString());
+    const auto& mem_info = Common::GetMemInfo();
+    using namespace Common::Literals;
+    LOG_INFO(Frontend, "Host RAM: {:.2f} GiB", mem_info.total_physical_memory / f64{1_GiB});
+    LOG_INFO(Frontend, "Host Swap: {:.2f} GiB", mem_info.total_swap_memory / f64{1_GiB});
     UpdateWindowTitle();
 
     show();
@@ -250,8 +257,11 @@ void GMainWindow::InitializeWidgets() {
 #ifdef CITRA_ENABLE_COMPATIBILITY_REPORTING
     ui->action_Report_Compatibility->setVisible(true);
 #endif
-    render_window = new GRenderWindow(this, emu_thread.get());
+    render_window = new GRenderWindow(this, emu_thread.get(), false);
+    secondary_window = new GRenderWindow(this, emu_thread.get(), true);
     render_window->hide();
+    secondary_window->hide();
+    secondary_window->setParent(nullptr);
 
     game_list = new GameList(this);
     ui->horizontalLayout->addWidget(game_list);
@@ -263,7 +273,7 @@ void GMainWindow::InitializeWidgets() {
     loading_screen = new LoadingScreen(this);
     loading_screen->hide();
     ui->horizontalLayout->addWidget(loading_screen);
-    connect(loading_screen, &LoadingScreen::Hidden, [&] {
+    connect(loading_screen, &LoadingScreen::Hidden, this, [&] {
         loading_screen->Clear();
         if (emulation_running) {
             render_window->show();
@@ -271,6 +281,7 @@ void GMainWindow::InitializeWidgets() {
         }
     });
 
+    InputCommon::Init();
     multiplayer_state = new MultiplayerState(this, game_list->GetModel(), ui->action_Leave_Room,
                                              ui->action_Show_Room);
     multiplayer_state->setVisible(false);
@@ -321,6 +332,7 @@ void GMainWindow::InitializeWidgets() {
     actionGroup_ScreenLayouts->addAction(ui->action_Screen_Layout_Single_Screen);
     actionGroup_ScreenLayouts->addAction(ui->action_Screen_Layout_Large_Screen);
     actionGroup_ScreenLayouts->addAction(ui->action_Screen_Layout_Side_by_Side);
+    actionGroup_ScreenLayouts->addAction(ui->action_Screen_Layout_Separate_Windows);
 }
 
 void GMainWindow::InitializeDebugWidgets() {
@@ -432,13 +444,13 @@ void GMainWindow::InitializeSaveStateMenuActions() {
         ui->menu_Save_State->addAction(actions_save_state[i]);
     }
 
-    connect(ui->action_Load_from_Newest_Slot, &QAction::triggered, [this] {
+    connect(ui->action_Load_from_Newest_Slot, &QAction::triggered, this, [this] {
         UpdateSaveStates();
         if (newest_slot != 0) {
             actions_load_state[newest_slot - 1]->trigger();
         }
     });
-    connect(ui->action_Save_to_Oldest_Slot, &QAction::triggered, [this] {
+    connect(ui->action_Save_to_Oldest_Slot, &QAction::triggered, this, [this] {
         UpdateSaveStates();
         actions_save_state[oldest_slot - 1]->trigger();
     });
@@ -461,6 +473,9 @@ void GMainWindow::InitializeHotkeys() {
     const QString toggle_filter_bar = QStringLiteral("Toggle Filter Bar");
     const QString toggle_status_bar = QStringLiteral("Toggle Status Bar");
     const QString fullscreen = QStringLiteral("Fullscreen");
+    const QString toggle_screen_layout = QStringLiteral("Toggle Screen Layout");
+    const QString swap_screens = QStringLiteral("Swap Screens");
+    const QString rotate_screens = QStringLiteral("Rotate Screens Upright");
 
     ui->action_Show_Filter_Bar->setShortcut(
         hotkey_registry.GetKeySequence(main_window, toggle_filter_bar));
@@ -498,18 +513,40 @@ void GMainWindow::InitializeHotkeys() {
                     return;
                 BootGame(QString(game_path));
             });
-    connect(hotkey_registry.GetHotkey(main_window, QStringLiteral("Swap Screens"), render_window),
+    connect(hotkey_registry.GetHotkey(main_window, swap_screens, render_window),
             &QShortcut::activated, ui->action_Screen_Layout_Swap_Screens, &QAction::trigger);
-    connect(hotkey_registry.GetHotkey(main_window, QStringLiteral("Rotate Screens Upright"),
-                                      render_window),
+    connect(hotkey_registry.GetHotkey(main_window, rotate_screens, render_window),
             &QShortcut::activated, ui->action_Screen_Layout_Upright_Screens, &QAction::trigger);
-    connect(hotkey_registry.GetHotkey(main_window, QStringLiteral("Toggle Screen Layout"),
-                                      render_window),
+    connect(hotkey_registry.GetHotkey(main_window, toggle_screen_layout, render_window),
             &QShortcut::activated, this, &GMainWindow::ToggleScreenLayout);
     connect(hotkey_registry.GetHotkey(main_window, fullscreen, render_window),
             &QShortcut::activated, ui->action_Fullscreen, &QAction::trigger);
     connect(hotkey_registry.GetHotkey(main_window, fullscreen, render_window),
             &QShortcut::activatedAmbiguously, ui->action_Fullscreen, &QAction::trigger);
+
+    const auto add_secondary_window_hotkey = [this](QKeySequence hotkey, const char* slot) {
+        // This action will fire specifically when secondary_window is in focus
+        QAction* secondary_window_action = new QAction(secondary_window);
+        secondary_window_action->setShortcut(hotkey);
+
+        connect(secondary_window_action, SIGNAL(triggered()), this, slot);
+        secondary_window->addAction(secondary_window_action);
+    };
+
+    // Use the same fullscreen hotkey as the main window
+    const auto fullscreen_hotkey = hotkey_registry.GetKeySequence(main_window, fullscreen);
+    add_secondary_window_hotkey(fullscreen_hotkey, SLOT(ToggleSecondaryFullscreen()));
+
+    const auto toggle_screen_hotkey =
+        hotkey_registry.GetKeySequence(main_window, toggle_screen_layout);
+    add_secondary_window_hotkey(toggle_screen_hotkey, SLOT(ToggleScreenLayout()));
+
+    const auto swap_screen_hotkey = hotkey_registry.GetKeySequence(main_window, swap_screens);
+    add_secondary_window_hotkey(swap_screen_hotkey, SLOT(TriggerSwapScreens()));
+
+    const auto rotate_screen_hotkey = hotkey_registry.GetKeySequence(main_window, rotate_screens);
+    add_secondary_window_hotkey(rotate_screen_hotkey, SLOT(TriggerRotateScreens()));
+
     connect(hotkey_registry.GetHotkey(main_window, QStringLiteral("Exit Fullscreen"), this),
             &QShortcut::activated, this, [&] {
                 if (emulation_running) {
@@ -596,6 +633,9 @@ void GMainWindow::InitializeHotkeys() {
             &QShortcut::activated, ui->action_Load_from_Newest_Slot, &QAction::trigger);
     connect(hotkey_registry.GetHotkey(main_window, QStringLiteral("Save to Oldest Slot"), this),
             &QShortcut::activated, ui->action_Save_to_Oldest_Slot, &QAction::trigger);
+    connect(hotkey_registry.GetHotkey(main_window, QStringLiteral("Mute Audio"), this),
+            &QShortcut::activated, this,
+            [] { Settings::values.audio_muted = !Settings::values.audio_muted; });
 }
 
 void GMainWindow::ShowUpdaterWidgets() {
@@ -674,12 +714,16 @@ void GMainWindow::ConnectWidgetEvents() {
     connect(game_list_placeholder, &GameListPlaceholder::AddDirectory, this,
             &GMainWindow::OnGameListAddDirectory);
     connect(game_list, &GameList::ShowList, this, &GMainWindow::OnGameListShowList);
-    connect(game_list, &GameList::PopulatingCompleted,
+    connect(game_list, &GameList::PopulatingCompleted, this,
             [this] { multiplayer_state->UpdateGameList(game_list->GetModel()); });
 
     connect(this, &GMainWindow::EmulationStarting, render_window,
             &GRenderWindow::OnEmulationStarting);
     connect(this, &GMainWindow::EmulationStopping, render_window,
+            &GRenderWindow::OnEmulationStopping);
+    connect(this, &GMainWindow::EmulationStarting, secondary_window,
+            &GRenderWindow::OnEmulationStarting);
+    connect(this, &GMainWindow::EmulationStopping, secondary_window,
             &GRenderWindow::OnEmulationStopping);
 
     connect(&status_bar_update_timer, &QTimer::timeout, this, &GMainWindow::UpdateStatusBar);
@@ -754,6 +798,8 @@ void GMainWindow::ConnectMenuEvents() {
             &GMainWindow::ChangeScreenLayout);
     connect(ui->action_Screen_Layout_Side_by_Side, &QAction::triggered, this,
             &GMainWindow::ChangeScreenLayout);
+    connect(ui->action_Screen_Layout_Separate_Windows, &QAction::triggered, this,
+            &GMainWindow::ChangeScreenLayout);
     connect(ui->action_Screen_Layout_Swap_Screens, &QAction::triggered, this,
             &GMainWindow::OnSwapScreens);
     connect(ui->action_Screen_Layout_Upright_Screens, &QAction::triggered, this,
@@ -765,7 +811,7 @@ void GMainWindow::ConnectMenuEvents() {
     connect(ui->action_Close_Movie, &QAction::triggered, this, &GMainWindow::OnCloseMovie);
     connect(ui->action_Save_Movie, &QAction::triggered, this, &GMainWindow::OnSaveMovie);
     connect(ui->action_Movie_Read_Only_Mode, &QAction::toggled, this,
-            [this](bool checked) { Core::Movie::GetInstance().SetReadOnly(checked); });
+            [](bool checked) { Core::Movie::GetInstance().SetReadOnly(checked); });
     connect(ui->action_Enable_Frame_Advancing, &QAction::triggered, this, [this] {
         if (emulation_running) {
             Core::System::GetInstance().frame_limiter.SetFrameAdvancing(
@@ -913,21 +959,25 @@ bool GMainWindow::LoadROM(const QString& filename) {
         ShutdownGame();
 
     render_window->InitRenderTarget();
+    secondary_window->InitRenderTarget();
 
     Frontend::ScopeAcquireContext scope(*render_window);
 
-    const QString below_gl33_title = tr("OpenGL 3.3 Unsupported");
-    const QString below_gl33_message = tr("Your GPU may not support OpenGL 3.3, or you do not "
+#ifndef __APPLE__
+    const QString below_gl43_title = tr("OpenGL 4.3 Unsupported");
+    const QString below_gl43_message = tr("Your GPU may not support OpenGL 4.3, or you do not "
                                           "have the latest graphics driver.");
 
-    if (!QOpenGLContext::globalShareContext()->versionFunctions<QOpenGLFunctions_3_3_Core>()) {
-        QMessageBox::critical(this, below_gl33_title, below_gl33_message);
+    if (!QOpenGLContext::globalShareContext()->versionFunctions<QOpenGLFunctions_4_3_Core>()) {
+        QMessageBox::critical(this, below_gl43_title, below_gl43_message);
         return false;
     }
+#endif
 
     Core::System& system{Core::System::GetInstance()};
 
-    const Core::System::ResultStatus result{system.Load(*render_window, filename.toStdString())};
+    const Core::System::ResultStatus result{
+        system.Load(*render_window, filename.toStdString(), secondary_window)};
 
     if (result != Core::System::ResultStatus::Success) {
         switch (result) {
@@ -991,10 +1041,12 @@ bool GMainWindow::LoadROM(const QString& filename) {
                    "proper drivers for your graphics card from the manufacturer's website."));
             break;
 
-        case Core::System::ResultStatus::ErrorVideoCore_ErrorBelowGL33:
-            QMessageBox::critical(this, below_gl33_title, below_gl33_message);
+#ifndef __APPLE__
+        case Core::System::ResultStatus::ErrorVideoCore_ErrorBelowGL43:
+            QMessageBox::critical(this, below_gl43_title, below_gl43_message);
             break;
-
+#endif
+                
         default:
             QMessageBox::critical(
                 this, tr("Error while loading ROM!"),
@@ -1089,6 +1141,8 @@ void GMainWindow::BootGame(const QString& filename) {
 
     connect(render_window, &GRenderWindow::Closed, this, &GMainWindow::OnStopGame);
     connect(render_window, &GRenderWindow::MouseActivity, this, &GMainWindow::OnMouseActivity);
+    connect(secondary_window, &GRenderWindow::Closed, this, &GMainWindow::OnStopGame);
+    connect(secondary_window, &GRenderWindow::MouseActivity, this, &GMainWindow::OnMouseActivity);
 
     // BlockingQueuedConnection is important here, it makes sure we've finished refreshing our views
     // before the CPU continues
@@ -1180,6 +1234,7 @@ void GMainWindow::ShutdownGame() {
 
     // The emulation is stopped, so closing the window or not does not matter anymore
     disconnect(render_window, &GRenderWindow::Closed, this, &GMainWindow::OnStopGame);
+    disconnect(secondary_window, &GRenderWindow::Closed, this, &GMainWindow::OnStopGame);
 
     // Update the GUI
     ui->action_Start->setEnabled(false);
@@ -1194,6 +1249,7 @@ void GMainWindow::ShutdownGame() {
     ui->action_Advance_Frame->setEnabled(false);
     ui->action_Capture_Screenshot->setEnabled(false);
     render_window->hide();
+    secondary_window->hide();
     loading_screen->hide();
     loading_screen->Clear();
     if (game_list->IsEmpty())
@@ -1227,6 +1283,7 @@ void GMainWindow::ShutdownGame() {
 
     // When closing the game, destroy the GLWindow to clear the context after the game is closed
     render_window->ReleaseRenderTarget();
+    secondary_window->ReleaseRenderTarget();
 }
 
 void GMainWindow::StoreRecentFile(const QString& filename) {
@@ -1317,7 +1374,9 @@ void GMainWindow::UpdateSaveStates() {
 }
 
 void GMainWindow::OnGameListLoadFile(QString game_path) {
-    BootGame(game_path);
+    if (ConfirmChangeGame()) {
+        BootGame(game_path);
+    }
 }
 
 void GMainWindow::OnGameListOpenFolder(u64 data_id, GameListOpenTarget target) {
@@ -1410,7 +1469,7 @@ void GMainWindow::OnGameListDumpRomFS(QString game_path, u64 program_id) {
                     program_id | 0x0004000e00000000);
     using FutureWatcher = QFutureWatcher<std::pair<Loader::ResultStatus, Loader::ResultStatus>>;
     auto* future_watcher = new FutureWatcher(this);
-    connect(future_watcher, &FutureWatcher::finished,
+    connect(future_watcher, &FutureWatcher::finished, this,
             [this, dialog, base_path, update_path, future_watcher] {
                 dialog->hide();
                 const auto& [base, update] = future_watcher->result();
@@ -1512,7 +1571,7 @@ void GMainWindow::InstallCIA(QStringList filepaths) {
         const auto cia_progress = [&](std::size_t written, std::size_t total) {
             emit UpdateProgress(written, total);
         };
-        for (const auto current_path : filepaths) {
+        for (const auto& current_path : filepaths) {
             status = Service::AM::InstallCIA(current_path.toStdString(), cia_progress);
             emit CIAInstallReport(status, current_path);
         }
@@ -1549,6 +1608,10 @@ void GMainWindow::OnCIAInstallReport(Service::AM::InstallStatus status, QString 
                               tr("%1 must be decrypted "
                                  "before being used with Citra. A real 3DS is required.")
                                   .arg(filename));
+        break;
+    case Service::AM::InstallStatus::ErrorFileNotFound:
+        QMessageBox::critical(this, tr("Unable to find File"),
+                              tr("Could not find %1").arg(filename));
         break;
     }
 }
@@ -1621,6 +1684,7 @@ void GMainWindow::OnStopGame() {
 
 void GMainWindow::OnLoadComplete() {
     loading_screen->OnLoadComplete();
+    UpdateSecondaryWindowVisibility();
 }
 
 void GMainWindow::OnMenuReportCompatibility() {
@@ -1642,6 +1706,17 @@ void GMainWindow::ToggleFullscreen() {
         ShowFullscreen();
     } else {
         HideFullscreen();
+    }
+}
+
+void GMainWindow::ToggleSecondaryFullscreen() {
+    if (!emulation_running) {
+        return;
+    }
+    if (secondary_window->isFullScreen()) {
+        secondary_window->showNormal();
+    } else {
+        secondary_window->showFullScreen();
     }
 }
 
@@ -1694,6 +1769,19 @@ void GMainWindow::ToggleWindowMode() {
     }
 }
 
+void GMainWindow::UpdateSecondaryWindowVisibility() {
+    if (!emulation_running) {
+        return;
+    }
+    if (Settings::values.layout_option == Settings::LayoutOption::SeparateWindows) {
+        secondary_window->RestoreGeometry();
+        secondary_window->show();
+    } else {
+        secondary_window->BackupGeometry();
+        secondary_window->hide();
+    }
+}
+
 void GMainWindow::ChangeScreenLayout() {
     Settings::LayoutOption new_layout = Settings::LayoutOption::Default;
 
@@ -1705,33 +1793,38 @@ void GMainWindow::ChangeScreenLayout() {
         new_layout = Settings::LayoutOption::LargeScreen;
     } else if (ui->action_Screen_Layout_Side_by_Side->isChecked()) {
         new_layout = Settings::LayoutOption::SideScreen;
+    } else if (ui->action_Screen_Layout_Separate_Windows->isChecked()) {
+        new_layout = Settings::LayoutOption::SeparateWindows;
     }
 
     Settings::values.layout_option = new_layout;
     Settings::Apply();
+    UpdateSecondaryWindowVisibility();
 }
 
 void GMainWindow::ToggleScreenLayout() {
-    Settings::LayoutOption new_layout = Settings::LayoutOption::Default;
-
-    switch (Settings::values.layout_option) {
-    case Settings::LayoutOption::Default:
-        new_layout = Settings::LayoutOption::SingleScreen;
-        break;
-    case Settings::LayoutOption::SingleScreen:
-        new_layout = Settings::LayoutOption::LargeScreen;
-        break;
-    case Settings::LayoutOption::LargeScreen:
-        new_layout = Settings::LayoutOption::SideScreen;
-        break;
-    case Settings::LayoutOption::SideScreen:
-        new_layout = Settings::LayoutOption::Default;
-        break;
-    }
+    const Settings::LayoutOption new_layout = []() {
+        switch (Settings::values.layout_option) {
+        case Settings::LayoutOption::Default:
+            return Settings::LayoutOption::SingleScreen;
+        case Settings::LayoutOption::SingleScreen:
+            return Settings::LayoutOption::LargeScreen;
+        case Settings::LayoutOption::LargeScreen:
+            return Settings::LayoutOption::SideScreen;
+        case Settings::LayoutOption::SideScreen:
+            return Settings::LayoutOption::SeparateWindows;
+        case Settings::LayoutOption::SeparateWindows:
+            return Settings::LayoutOption::Default;
+        default:
+            LOG_ERROR(Frontend, "Unknown layout option {}", Settings::values.layout_option);
+            return Settings::LayoutOption::Default;
+        }
+    }();
 
     Settings::values.layout_option = new_layout;
     SyncMenuUISettings();
     Settings::Apply();
+    UpdateSecondaryWindowVisibility();
 }
 
 void GMainWindow::OnSwapScreens() {
@@ -1742,6 +1835,14 @@ void GMainWindow::OnSwapScreens() {
 void GMainWindow::OnRotateScreens() {
     Settings::values.upright_screen = ui->action_Screen_Layout_Upright_Screens->isChecked();
     Settings::Apply();
+}
+
+void GMainWindow::TriggerSwapScreens() {
+    ui->action_Screen_Layout_Swap_Screens->trigger();
+}
+
+void GMainWindow::TriggerRotateScreens() {
+    ui->action_Screen_Layout_Upright_Screens->trigger();
 }
 
 void GMainWindow::OnCheats() {
@@ -1796,6 +1897,7 @@ void GMainWindow::OnConfigure() {
         } else {
             setMouseTracking(false);
         }
+        UpdateSecondaryWindowVisibility();
     } else {
         Settings::values.input_profiles = old_input_profiles;
         Settings::values.touch_from_button_maps = old_touch_from_button_maps;
@@ -1973,8 +2075,10 @@ void GMainWindow::OnCaptureScreenshot() {
     const QString filename = game_title.remove(QRegularExpression(QStringLiteral("[\\/:?\"<>|]")));
     const QString timestamp =
         QDateTime::currentDateTime().toString(QStringLiteral("dd.MM.yy_hh.mm.ss.z"));
-    path.append(QStringLiteral("/%1_%2.png").arg(filename).arg(timestamp));
-    render_window->CaptureScreenshot(UISettings::values.screenshot_resolution_factor, path);
+    path.append(QStringLiteral("/%1_%2.png").arg(filename, timestamp));
+
+    auto* const screenshot_window = secondary_window->HasFocus() ? secondary_window : render_window;
+    screenshot_window->CaptureScreenshot(UISettings::values.screenshot_resolution_factor, path);
     OnStartGame();
 }
 
@@ -2048,7 +2152,7 @@ void GMainWindow::UpdateStatusBar() {
         message_label_used_for_movie = true;
         ui->action_Save_Movie->setEnabled(true);
     } else if (play_mode == Core::Movie::PlayMode::Playing) {
-        message_label->setText(tr("Playing %1 / %2").arg(current).arg(total));
+        message_label->setText(tr("Playing %1 / %2").arg(current, total));
         message_label->setVisible(true);
         message_label_used_for_movie = true;
         ui->action_Save_Movie->setEnabled(false);
@@ -2210,7 +2314,9 @@ void GMainWindow::closeEvent(QCloseEvent* event) {
         ShutdownGame();
 
     render_window->close();
+    secondary_window->close();
     multiplayer_state->Close();
+    InputCommon::Shutdown();
     QWidget::closeEvent(event);
 }
 
@@ -2395,6 +2501,8 @@ void GMainWindow::SyncMenuUISettings() {
                                                       Settings::LayoutOption::LargeScreen);
     ui->action_Screen_Layout_Side_by_Side->setChecked(Settings::values.layout_option ==
                                                       Settings::LayoutOption::SideScreen);
+    ui->action_Screen_Layout_Separate_Windows->setChecked(Settings::values.layout_option ==
+                                                          Settings::LayoutOption::SeparateWindows);
     ui->action_Screen_Layout_Swap_Screens->setChecked(Settings::values.swap_screen);
     ui->action_Screen_Layout_Upright_Screens->setChecked(Settings::values.upright_screen);
 }
@@ -2441,7 +2549,11 @@ int main(int argc, char* argv[]) {
     QCoreApplication::setApplicationName(QStringLiteral("Citra"));
 
     QSurfaceFormat format;
-    format.setVersion(3, 3);
+#ifdef __APPLE__
+    format.setVersion(4, 1);
+#else
+    format.setVersion(4, 3);
+#endif
     format.setProfile(QSurfaceFormat::CoreProfile);
     format.setSwapInterval(0);
     // TODO: expose a setting for buffer value (ie default/single/double/triple)
