@@ -43,6 +43,7 @@ install_name_tool -change @loader_path/libs/libc++.1.0.dylib /usr/lib/libc++.1.d
 
 # Make the launching script executable
 chmod +x $BUNDLE_EXECUTABLE_PATH
+codesign -s - --deep --force $BUNDLE_EXECUTABLE_PATH
 
 # Verify loader instructions
 find "$REV_NAME" -type f -exec otool -L {} \;
