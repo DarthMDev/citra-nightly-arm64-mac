@@ -24,8 +24,8 @@ cmake .. -DCMAKE_BUILD_TYPE=Release \
     -DENABLE_FFMPEG_AUDIO_DECODER=ON \
     -DENABLE_FFMPEG_VIDEO_DUMPER=ON \
     -DCMAKE_OSX_ARCHITECTURES="x86_64;arm64" \
-    -GNinja
-ninja
+    -G "Unix Makefiles"
+make -j4 
 
 ccache -s
 
