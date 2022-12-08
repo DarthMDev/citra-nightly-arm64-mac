@@ -95,6 +95,7 @@ jobs:
         env:
           MACOSX_DEPLOYMENT_TARGET: "10.13"
           ENABLE_COMPATIBILITY_REPORTING: "ON"
+          CIBW_ARCHS_MACOS: universal2
       - name: Pack
         run: ./.ci/macos/upload.sh
       - name: Upload
