@@ -23,14 +23,14 @@ CITRA_STANDALONE_PATH="$REV_NAME/citra"
 # move libs into folder for deployment
 python3 -m macpack.patcher $BUNDLE_EXECUTABLE_PATH -d "../Frameworks"
 # move qt frameworks into app bundle for deployment
-$(brew --prefix)/opt/qt5/bin/macdeployqt $BUNDLE_PATH -executable=$BUNDLE_EXECUTABLE_PATH
+/opt/local/libexec/qt5/bin/macdeployqt $BUNDLE_PATH -executable=$BUNDLE_EXECUTABLE_PATH
 
 # move libs into folder for deployment
 python3 -m macpack.patcher $CITRA_STANDALONE_PATH -d "libs"
 
 # bundle MoltenVK
-VULKAN_LOADER_PATH=$(brew --prefix vulkan-loader)
-MOLTENVK_PATH=$(brew --prefix molten-vk)
+VULKAN_LOADER_PATH=/opt/local/libexec/vulkan-loader
+MOLTENVK_PATH=/opt/local/libexec/moltenvk
 mkdir $BUNDLE_LIB_PATH
 cp $VULKAN_LOADER_PATH/lib/libvulkan.dylib $BUNDLE_LIB_PATH
 cp $MOLTENVK_PATH/lib/libMoltenVK.dylib $BUNDLE_LIB_PATH
