@@ -3,7 +3,7 @@
 set -o pipefail
 
 export Qt5_DIR=/opt/local/libexec/qt5
-export PATH="/opt/local/libexec:$PATH"
+# export PATH="/opt/local/libexec:$PATH"
 # ccache configurations
 export CCACHE_CPP2=yes
 export CCACHE_SLOPPINESS=time_macros
@@ -12,7 +12,6 @@ export CC="ccache clang"
 export CXX="ccache clang++"
 export OBJC="clang"
 export ASM="clang"
-
 ccache -s
 
 mkdir build && cd build
