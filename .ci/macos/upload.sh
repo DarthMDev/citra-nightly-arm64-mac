@@ -29,8 +29,8 @@ python3 -m macpack.patcher $BUNDLE_EXECUTABLE_PATH -d "../Frameworks"
 python3 -m macpack.patcher $CITRA_STANDALONE_PATH -d "libs"
 
 # bundle MoltenVK
-VULKAN_LOADER_PATH=/opt/local/libexec/vulkan-loader
-MOLTENVK_PATH=/opt/local/libexec/moltenvk
+VULKAN_LOADER_PATH=/opt/local
+MOLTENVK_PATH=/opt/local
 mkdir $BUNDLE_LIB_PATH
 cp $VULKAN_LOADER_PATH/lib/libvulkan.dylib $BUNDLE_LIB_PATH
 cp $MOLTENVK_PATH/lib/libMoltenVK.dylib $BUNDLE_LIB_PATH
