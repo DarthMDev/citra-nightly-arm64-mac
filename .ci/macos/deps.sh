@@ -6,7 +6,7 @@ export PATH=$PATH:/opt/local/bin
 sudo port install cmake ninja qt5 ccache p7zip
 git clone https://github.com/FFmpeg/FFmpeg
 cd FFmpeg
-git checkout n4.4
+git checkout release/4.4
 ./configure --arch=arm64
 make -j8
 sudo make install
