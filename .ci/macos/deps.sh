@@ -4,8 +4,8 @@ sudo installer -pkg ./MacPorts-2.8.0-12-Monterey.pkg -target /
 
 export PATH=$PATH:/opt/local/bin
 sudo port install cmake ninja qt5 ccache p7zip
-sudo port install ffmpeg +universal libsdl2 +universal vulkan-loader +universal
-sudo port install moltenvk -architecture arm64
+sudo port install libsdl2 +universal 
+sudo port install vulkan-loader  -architecture arm64 ffmpeg  -architecture arm64 moltenvk -architecture arm64
 pip3 install macpack
 
 export SDL_VER=2.0.16
