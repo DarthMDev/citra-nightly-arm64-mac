@@ -1,7 +1,9 @@
 #!/bin/sh -ex
 wget https://github.com/macports/macports-base/releases/download/v2.8.0/MacPorts-2.8.0-12-Monterey.pkg
 sudo installer -pkg ./MacPorts-2.8.0-12-Monterey.pkg -target /
-echo "/opt/local/bin" | sudo tee -a /etc/paths
+
+export PATH=$PATH:/opt/local/bin
+
 sudo port install qt5 moltenvk vulkan-loader p7zip ccache ninja cmake +universal
 pip3 install macpack
 
