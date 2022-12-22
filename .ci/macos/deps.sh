@@ -6,7 +6,8 @@ export PATH=$PATH:/opt/local/bin
 sudo port install cmake ninja qt5 ccache p7zip
 wget https://github.com/ColorsWind/FFmpeg-macOS/releases/download/n5.0.1-patch3/FFmpeg-shared-n5.0.1-OSX-universal.zip
 unzip FFmpeg-shared-n5.0.1-OSX-universal.zip -d FFmpeg-shared-n5.0.1-OSX-universal
-cp -rv $(pwd)/FFmpeg-shared-n5.0.1-OSX-universal/* /
+# copy ffmpeg to /usr/local
+cp -rv $(pwd)/FFmpeg-shared-n5.0.1-OSX-universal/* /usr/local/
 
 sudo port install libsdl2 +universal 
 sudo port install moltenvk 
