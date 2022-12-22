@@ -3,8 +3,8 @@ wget https://github.com/macports/macports-base/releases/download/v2.8.0/MacPorts
 sudo installer -pkg ./MacPorts-2.8.0-12-Monterey.pkg -target /
 
 export PATH=$PATH:/opt/local/bin
-sudo port install cmake ninja qt5 ccache
-sudo port install ffmpeg libsdl2 vulkan-loader p7zip   +universal
+sudo port install cmake ninja qt5 ccache p7zip
+sudo port install ffmpeg +universal libsdl2 +universal vulkan-loader +universal
 sudo port install moltenvk -architecture arm64
 pip3 install macpack
 
