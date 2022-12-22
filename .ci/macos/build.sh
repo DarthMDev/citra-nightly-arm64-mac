@@ -4,6 +4,7 @@ set -o pipefail
 
 export Qt5_DIR=/opt/local/libexec/qt5
 # export PATH="/opt/local/libexec:$PATH"
+export PATH=$PATH:/opt/local/bin
 # ccache configurations
 export CCACHE_CPP2=yes
 export CCACHE_SLOPPINESS=time_macros

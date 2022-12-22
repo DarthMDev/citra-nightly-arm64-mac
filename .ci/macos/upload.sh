@@ -5,7 +5,7 @@
 REV_NAME="citra-osx-${GITDATE}-${GITREV}"
 ARCHIVE_NAME="${REV_NAME}.tar.gz"
 COMPRESSION_FLAGS="-czvf"
-
+export PATH=$PATH:/opt/local/bin
 mkdir "$REV_NAME"
 
 cp build/bin/Release/citra "$REV_NAME"
