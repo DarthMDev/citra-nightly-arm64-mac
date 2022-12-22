@@ -5,7 +5,7 @@ sudo installer -pkg ./MacPorts-2.8.0-12-Monterey.pkg -target /
 export PATH=$PATH:/opt/local/bin
 sudo port install cmake ninja qt5 ccache p7zip
 wget https://github.com/ColorsWind/FFmpeg-macOS/releases/download/n5.0.1-patch3/FFmpeg-shared-n5.0.1-OSX-universal.zip
-unzip FFmpeg-shared-n5.0.1-OSX-universal.zip
+unzip FFmpeg-shared-n5.0.1-OSX-universal.zip -d FFmpeg-shared-n5.0.1-OSX-universal
 cp -rv $(pwd)/FFmpeg-shared-n5.0.1-OSX-universal/* /
 
 sudo port install libsdl2 +universal 
