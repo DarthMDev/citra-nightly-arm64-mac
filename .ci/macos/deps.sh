@@ -17,10 +17,24 @@ git clone git://code.qt.io/qt/qt5.git
 cd qt5
 git checkout 5.15
 perl init-repository
-mkdir qt5-build
-cd qt5-build
-../configure -release -prefix ./qtbase -nomake examples -nomake tests QMAKE_APPLE_DEVICE_ARCHS="arm64 x86_64" -opensource -confirm-license -skip qt3d -skip qtwebengine
+cd ..
+mkdir qt5-build-arm64
+cd qt5-build-arm64
+../qt5/configure -release -prefix ./qtbase -nomake examples -nomake tests QMAKE_APPLE_DEVICE_ARCHS="arm64" -opensource -confirm-license -skip qt3d -skip qtwebengine
 make -j8
+cd ..
+mkdir qt5-build-x86_64
+cd qt5-build-x86_64
+../qt5/configure -release -prefix ./qtbase -nomake examples -nomake tests QMAKE_APPLE_DEVICE_ARCHS="x86_64" -opensource -confirm-license -skip qt3d -skip qtwebengine
+make -j8
+cd ..
+mkdir qt5-build-universal
+git clone https://github.com/nedrysoft/makeuniversal
+cd makeuniversal
+./makeuniversal "../qt5-mac-universal" "../qt5-build-x86_64/qtbase" "../qt5-build-arm64/qtbase"
+cd ..
+
+
 # compile vulkan loader
 git clone https://github.com/KhronosGroup/Vulkan-Loader
 cd Vulkan-Loader
@@ -29,6 +43,7 @@ cd build
 cmake -DUPDATE_DEPS=ON -DVULKAN_HEADERS_INSTALL_DIR=/opt/local -DCMAKE_BUILD_TYPE=Release -DCMAKE_OSX_ARCHITECTURES="arm64" ..
 make -j8
 sudo make install
+cd ../..
 #sudo port install vulkan-loader +arm64
 #sudo port install ffmpeg +arm64
 # sudo port install moltenvk +arm64
@@ -36,7 +51,7 @@ pip3 install macpack
 
 export SDL_VER=2.0.16
 export FFMPEG_VER=4.4
-
+cd ../../
 mkdir tmp
 cd tmp/
 

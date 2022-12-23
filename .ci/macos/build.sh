@@ -2,7 +2,7 @@
 
 set -o pipefail
 
-export Qt5_DIR=qt5/qt5-build/qtbase
+export Qt5_DIR=qt5-build-universal
 # export PATH="/opt/local/libexec:$PATH"
 export PATH=$PATH:/opt/local/bin
 # ccache configurations
