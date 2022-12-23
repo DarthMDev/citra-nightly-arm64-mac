@@ -51,7 +51,6 @@ pip3 install macpack
 
 export SDL_VER=2.0.16
 export FFMPEG_VER=4.4
-cd ../../
 mkdir tmp
 cd tmp/
 
