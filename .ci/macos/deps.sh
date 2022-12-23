@@ -4,7 +4,10 @@ sudo installer -pkg ./MacPorts-2.8.0-12-Monterey.pkg -target /
 
 export PATH=$PATH:/opt/local/bin
 sudo port install cmake ninja qt5 ccache p7zip
-
+wget https://github.com/ColorsWind/FFmpeg-macOS/releases/download/n5.0.1-patch3/FFmpeg-shared-n5.0.1-OSX-universal.zip
+unzip FFmpeg-shared-n5.0.1-OSX-universal.zip -d FFmpeg-shared-n5.0.1-OSX-universal
+# copy ffmpeg to /usr/local
+cp -rv FFmpeg-shared-n5.0.1-OSX-universal/* /usr/local
 sudo port install libsdl2 +universal 
 sudo port install moltenvk 
 git clone https://github.com/KhronosGroup/Vulkan-Loader
@@ -34,7 +37,3 @@ cd tmp/
 # wget https://github.com/SachinVin/ext-macos-bin/raw/main/ffmpeg/ffmpeg-${FFMPEG_VER}.7z
 # 7z x ffmpeg-${FFMPEG_VER}.7z
 # cp -rv $(pwd)/ffmpeg-${FFMPEG_VER}/* /
-wget https://github.com/ColorsWind/FFmpeg-macOS/releases/download/n5.0.1-patch3/FFmpeg-shared-n5.0.1-OSX-universal.zip
-unzip FFmpeg-shared-n5.0.1-OSX-universal.zip -d FFmpeg-shared-n5.0.1-OSX-universal
-# copy ffmpeg to /usr/local
-cp -rv $(pwd)/FFmpeg-shared-n5.0.1-OSX-universal/* /
