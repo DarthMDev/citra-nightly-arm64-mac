@@ -8,7 +8,7 @@ wget https://github.com/ColorsWind/FFmpeg-macOS/releases/download/n5.0.1-patch3/
 unzip FFmpeg-shared-n5.0.1-OSX-universal.zip -d FFmpeg-shared-n5.0.1-OSX-universal
 # copy ffmpeg to /usr/local
 cp -rv FFmpeg-shared-n5.0.1-OSX-universal/* /usr/local
-sudo port install libsdl2 +universal 
+sudo port install libsdl2 +universal openssl +universal openssl3 +universal
 sudo port install moltenvk 
 git clone https://github.com/KhronosGroup/Vulkan-Loader
 cd Vulkan-Loader
