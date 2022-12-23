@@ -21,7 +21,7 @@ cp -rv macos-deps-qt5-2022-11-21-universal/* qt5-build-universal
 cd qt5-build-universal/bin
 wget https://raw.githubusercontent.com/crystalidea/macdeployqt-universal/main/bin/macdeployqt
 chmod +x macdeployqt
-
+cd ../../
 
 # compile vulkan loader
 git clone https://github.com/KhronosGroup/Vulkan-Loader
