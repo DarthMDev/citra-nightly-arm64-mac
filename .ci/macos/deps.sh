@@ -10,29 +10,15 @@ unzip FFmpeg-shared-n5.0.1-OSX-universal.zip -d FFmpeg-shared-n5.0.1-OSX-univers
 cp -rv FFmpeg-shared-n5.0.1-OSX-universal/* /usr/local
 sudo port install libsdl2 +universal openssl +universal openssl3 +universal
 sudo port install moltenvk 
-sudo port install pcre2 +universal harfbuzz +universal freetype +universal
-sudo port install llvm-11 +universal
-# compile qt5 from source
-git clone git://code.qt.io/qt/qt5.git
-cd qt5
-git checkout 5.15
-perl init-repository
-cd ..
-mkdir qt5-build-arm64
-cd qt5-build-arm64
-../qt5/configure -release -prefix ./qtbase -nomake examples -nomake tests QMAKE_APPLE_DEVICE_ARCHS="arm64" -opensource -confirm-license -skip qt3d -skip qtwebengine
-make -j8
-cd ..
-mkdir qt5-build-x86_64
-cd qt5-build-x86_64
-../qt5/configure -release -prefix ./qtbase -nomake examples -nomake tests QMAKE_APPLE_DEVICE_ARCHS="x86_64" -opensource -confirm-license -skip qt3d -skip qtwebengine
-make -j8
-cd ..
+# grab qt5 from obs
+wget https://github.com/obsproject/obs-deps/releases/download/2022-11-21/macos-deps-qt5-2022-11-21-universal.tar.xz
+tar -xvf macos-deps-qt5-2022-11-21-universal.tar.xz
+
 mkdir qt5-build-universal
-git clone https://github.com/nedrysoft/makeuniversal
-cd makeuniversal
-./makeuniversal "../qt5-mac-universal" "../qt5-build-x86_64/qtbase" "../qt5-build-arm64/qtbase"
-cd ..
+cp -rv macos-deps-qt5-2022-11-21-universal/* qt5-build-universal
+cd qt5-build-universal/bin
+wget https://raw.githubusercontent.com/crystalidea/macdeployqt-universal/main/bin/macdeployqt
+chmod +x macdeployqt
 
 
 # compile vulkan loader
