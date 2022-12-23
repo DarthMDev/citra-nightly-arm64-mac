@@ -3,25 +3,40 @@ wget https://github.com/macports/macports-base/releases/download/v2.8.0/MacPorts
 sudo installer -pkg ./MacPorts-2.8.0-12-Monterey.pkg -target /
 
 export PATH=$PATH:/opt/local/bin
-sudo port install cmake ninja ccache p7zip
+sudo port install cmake +universal ninja ccache p7zip
 wget https://github.com/ColorsWind/FFmpeg-macOS/releases/download/n5.0.1-patch3/FFmpeg-shared-n5.0.1-OSX-universal.zip
 unzip FFmpeg-shared-n5.0.1-OSX-universal.zip -d FFmpeg-shared-n5.0.1-OSX-universal
 # copy ffmpeg to /usr/local
 cp -rv FFmpeg-shared-n5.0.1-OSX-universal/* /usr/local
 sudo port install libsdl2 +universal openssl +universal openssl3 +universal
 sudo port install moltenvk 
-# grab qt5 from obs
-wget https://github.com/obsproject/obs-deps/releases/download/2022-11-21/macos-deps-qt5-2022-11-21-universal.tar.xz
-# extract to macos-deps-qt5-2022-11-21-universal
-mkdir macos-deps-qt5-2022-11-21-universal
-tar -xvf macos-deps-qt5-2022-11-21-universal.tar.xz -C macos-deps-qt5-2022-11-21-universal
-
+sudo port install pcre2 +universal harfbuzz +universal freetype +universal
+sudo port install llvm-11 +universal
+# compile qt5 from source
+git clone git://code.qt.io/qt/qt5.git
+cd qt5
+git checkout 5.15.2
+perl init-repository
+cd ..
+mkdir qt5-build-arm64
+cd qt5-build-arm64
+../qt5/configure -device-option QMAKE_APPLE_DEVICE_ARCHS=arm64 -opensource -confirm-license -nomake examples -nomake tests -no-openssl -securetransport -prefix /usr/local/Qt-5.15.2-arm
+make -j8
+sudo make install
+cd ..
+mkdir qt5-build-x86_64
+cd qt5-build-x86_64
+../qt5/configure -opensource -confirm-license -nomake examples -nomake tests -no-openssl -securetransport
+make -j8
+sudo make install
+cd ..
 mkdir qt5-build-universal
-cp -rv macos-deps-qt5-2022-11-21-universal/* qt5-build-universal
-cd qt5-build-universal/bin
-wget https://raw.githubusercontent.com/crystalidea/macdeployqt-universal/main/bin/macdeployqt
-chmod +x macdeployqt
-cd ../../
+git clone https://github.com/nedrysoft/makeuniversal
+cd makeuniversal
+wget https://raw.githubusercontent.com/crystalidea/macdeployqt-universal/main/bin/makeuniversal
+chmod +x makeuniversal
+./makeuniversal "../qt5-build-universal" "/usr/local/Qt-5.15.2" "/usr/local/Qt-5.15.2-arm"
+
 
 # compile vulkan loader
 git clone https://github.com/KhronosGroup/Vulkan-Loader
