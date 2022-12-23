@@ -3,13 +3,25 @@ wget https://github.com/macports/macports-base/releases/download/v2.8.0/MacPorts
 sudo installer -pkg ./MacPorts-2.8.0-12-Monterey.pkg -target /
 
 export PATH=$PATH:/opt/local/bin
-sudo port install cmake ninja qt5 ccache p7zip
+sudo port install cmake ninja ccache p7zip
 wget https://github.com/ColorsWind/FFmpeg-macOS/releases/download/n5.0.1-patch3/FFmpeg-shared-n5.0.1-OSX-universal.zip
 unzip FFmpeg-shared-n5.0.1-OSX-universal.zip -d FFmpeg-shared-n5.0.1-OSX-universal
 # copy ffmpeg to /usr/local
 cp -rv FFmpeg-shared-n5.0.1-OSX-universal/* /usr/local
 sudo port install libsdl2 +universal openssl +universal openssl3 +universal
 sudo port install moltenvk 
+sudo port install pcre2 +universal harfbuzz +universal freetype +universal
+sudo port install llvm-11 +universal
+# compile qt5 from source
+git clone git://code.qt.io/qt/qt5.git
+cd qt5
+git checkout 5.15
+perl init-repository
+mkdir qt5-build
+cd qt5-build
+../configure -release -prefix ./qtbase -nomake examples -nomake tests QMAKE_APPLE_DEVICE_ARCHS="arm64 x86_64" -opensource -confirm-license -skip qt3d -skip qtwebengine
+make -j8
+# compile vulkan loader
 git clone https://github.com/KhronosGroup/Vulkan-Loader
 cd Vulkan-Loader
 mkdir build
