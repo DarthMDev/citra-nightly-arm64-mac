@@ -12,7 +12,9 @@ sudo port install libsdl2 +universal openssl +universal openssl3 +universal
 sudo port install moltenvk 
 # grab qt5 from obs
 wget https://github.com/obsproject/obs-deps/releases/download/2022-11-21/macos-deps-qt5-2022-11-21-universal.tar.xz
-tar -xvf macos-deps-qt5-2022-11-21-universal.tar.xz
+# extract to macos-deps-qt5-2022-11-21-universal
+mkdir macos-deps-qt5-2022-11-21-universal
+tar -xvf macos-deps-qt5-2022-11-21-universal.tar.xz -C macos-deps-qt5-2022-11-21-universal
 
 mkdir qt5-build-universal
 cp -rv macos-deps-qt5-2022-11-21-universal/* qt5-build-universal
