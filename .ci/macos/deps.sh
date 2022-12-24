@@ -21,7 +21,7 @@ git clone https://github.com/KhronosGroup/Vulkan-Loader
 cd Vulkan-Loader
 mkdir build
 cd build
-cmake -DUPDATE_DEPS=ON -DVULKAN_HEADERS_INSTALL_DIR=/opt/local -DCMAKE_BUILD_TYPE=Release -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64" ..
+cmake -DUPDATE_DEPS=ON -DCMAKE_BUILD_TYPE=Release -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64" ..
 make -j8
 sudo make install
 cd ../..
