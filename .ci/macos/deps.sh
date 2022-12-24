@@ -12,7 +12,7 @@ sudo port install libsdl2 +universal openssl +universal openssl3 +universal
 sudo port install moltenvk 
 # grab qt5 universal2 binaries
 wget https://github.com/MichaelGDev48/qt5.15.2-universal-binaries/releases/download/1.0/Qt-5.15.2-universal.zip 
-unzip Qt-5.15.2-universal.zip -d Qt-5.15.2-universal
+unzip Qt-5.15.2-universal
 chmod +x Qt-5.15.2-universal/bin/*
 
 
