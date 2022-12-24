@@ -23,10 +23,10 @@ cmake .. -DCMAKE_BUILD_TYPE=Release \
     -DUSE_DISCORD_PRESENCE=ON \
     -DENABLE_FFMPEG_AUDIO_DECODER=ON \
     -DENABLE_FFMPEG_VIDEO_DUMPER=ON \
-    -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64" \
+    -DCMAKE_OSX_ARCHITECTURES="arm64" \
     -GNinja
 ninja  
 
 ccache -s
 
-ctest -VV -C Release
+# ctest -VV -C Release
