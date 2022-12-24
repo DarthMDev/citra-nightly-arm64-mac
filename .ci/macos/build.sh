@@ -23,10 +23,30 @@ cmake .. -DCMAKE_BUILD_TYPE=Release \
     -DUSE_DISCORD_PRESENCE=ON \
     -DENABLE_FFMPEG_AUDIO_DECODER=ON \
     -DENABLE_FFMPEG_VIDEO_DUMPER=ON \
-    -DCMAKE_OSX_ARCHITECTURES="arm64" \
+    -DCMAKE_OSX_ARCHITECTURES="x86_64" \
     -GNinja
 ninja  
+# copy to build-64
+cd ..
+mkdir build-64 && cd build-64
+cp -r ../build/* .
+# build arm64 
+cd ..
+mkdir build-arm64 && cd build-arm64
+cmake .. -DCMAKE_BUILD_TYPE=Release \
+    -DENABLE_QT_TRANSLATION=ON \
+    -DCITRA_ENABLE_COMPATIBILITY_REPORTING=${ENABLE_COMPATIBILITY_REPORTING:-"OFF"} \
+    -DENABLE_COMPATIBILITY_LIST_DOWNLOAD=ON \
+    -DUSE_DISCORD_PRESENCE=ON \
+    -DENABLE_FFMPEG_AUDIO_DECODER=ON \
+    -DENABLE_FFMPEG_VIDEO_DUMPER=ON \
+    -DCMAKE_OSX_ARCHITECTURES="arm64" \
+    -GNinja
+ninja
+cd ..
+mkdir build-universal && cd build-universal
+lipo -create ../build-64/bin/citra-qt.app/Contents/MacOS/citra-qt ../build-arm64/bin/citra-qt.app/Contents/MacOS/citra-qt -output ../build/bin/citra-qt.app/Contents/MacOS/citra-qt
 
 ccache -s
 
-# ctest -VV -C Release
+ctest -VV -C Release
