@@ -14,6 +14,9 @@ python3 ../build-script/package.py --tag n5.0.1
 # extract to FFmpeg-shared-n5.0.1-OSX-universal
 unzip FFmpeg-shared-n5.0.1-OSX-universal.zip -d FFmpeg-shared-n5.0.1-OSX-universal
 cp -rv FFmpeg-shared-n5.0.1-OSX-universal/* /usr/local/
+# remove the arm64 and x86_64 folders
+rm -rf install_arm64/*
+rm -rf install_x86_64/*
 cd ..
 sudo port install libsdl2 +universal openssl +universal openssl3 +universal
 sudo port install moltenvk 
