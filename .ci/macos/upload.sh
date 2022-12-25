@@ -34,7 +34,7 @@ MOLTENVK_PATH=/opt/local
 mkdir $BUNDLE_LIB_PATH
 cp $VULKAN_LOADER_PATH/lib/libvulkan.dylib $BUNDLE_LIB_PATH
 cp $MOLTENVK_PATH/lib/libMoltenVK.dylib $BUNDLE_LIB_PATH
-cp -r /usr/share/vulkan $BUNDLE_RESOURCES_PATH
+cp -r /usr/local/share/vulkan $BUNDLE_RESOURCES_PATH
 install_name_tool -add_rpath "@loader_path/../lib/" $BUNDLE_EXECUTABLE_PATH
 
 # workaround for libc++
