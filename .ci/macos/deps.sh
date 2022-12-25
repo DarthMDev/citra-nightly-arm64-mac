@@ -4,20 +4,12 @@ sudo installer -pkg ./MacPorts-2.8.0-12-Monterey.pkg -target /
 
 export PATH=$PATH:/opt/local/bin
 sudo port install cmake ninja ccache p7zip
-git clone https://github.com/ColorsWind/FFmpeg-macOS.git build-script
-git clone https://github.com/FFmpeg/FFmpeg.git ffmpeg
-cd ffmpeg
-git checkout n5.0.1
-python3 ../build-script/make_compile.py 
-python3 ../build-script/make_universal.py
-python3 ../build-script/package.py --tag n5.0.1
-# extract to FFmpeg-shared-n5.0.1-OSX-universal
+wget https://github.com/ColorsWind/FFmpeg-macOS/releases/download/n5.0.1-patch3/FFmpeg-shared-n5.0.1-OSX-universal.zip
 unzip FFmpeg-shared-n5.0.1-OSX-universal.zip -d FFmpeg-shared-n5.0.1-OSX-universal
-cp -rv FFmpeg-shared-n5.0.1-OSX-universal/* /usr/local/
-# remove the arm64 and x86_64 folders
-rm -rf install_arm64/*
-rm -rf install_x86_64/*
-cd ..
+sudo cp -rv FFmpeg-shared-n5.0.1-OSX-universal/* /usr/local/
+# copy to /Users/runner/work/FFmpeg-macOS/FFmpeg-macOS/ffmpeg/install_universal
+mkdir -p /Users/runner/work/FFmpeg-macOS/FFmpeg-macOS/ffmpeg/install_universal
+sudo cp -rv FFmpeg-shared-n5.0.1-OSX-universal/* /Users/runner/work/FFmpeg-macOS/FFmpeg-macOS/ffmpeg/install_universal
 sudo port install libsdl2 +universal openssl +universal openssl3 +universal
 sudo port install moltenvk 
 # grab qt5 universal2 binaries
