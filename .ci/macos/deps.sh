@@ -4,10 +4,16 @@ sudo installer -pkg ./MacPorts-2.8.0-12-Monterey.pkg -target /
 
 export PATH=$PATH:/opt/local/bin
 sudo port install cmake ninja ccache p7zip
-wget https://github.com/ColorsWind/FFmpeg-macOS/releases/download/n5.0.1-patch3/FFmpeg-shared-n5.0.1-OSX-universal.zip
-unzip FFmpeg-shared-n5.0.1-OSX-universal.zip -d FFmpeg-shared-n5.0.1-OSX-universal
+git clone https://github.com/ColorsWind/FFmpeg-macOS.git build-script
+git clone https://github.com/FFmpeg/FFmpeg.git ffmpeg
+cd ffmpeg
+git checkout n5.0.1
+python3 ../build-script/make_compile.py 
+python3 ../build-script/make_universal.py
+#install_universal contains the universal binaries
+
 # copy ffmpeg to /usr/local
-cp -rv FFmpeg-shared-n5.0.1-OSX-universal/* /usr/local
+cp -r $(pwd)/install_universal/* /usr/local
 sudo port install libsdl2 +universal openssl +universal openssl3 +universal
 sudo port install moltenvk 
 # grab qt5 universal2 binaries
