@@ -44,7 +44,7 @@ cmake .. -DCMAKE_BUILD_TYPE=Release \
     -GNinja
 ninja
 cd ..
-lipo -create ../build-64/bin/Release/citra-qt.app/Contents/MacOS/citra-qt ../build-arm64/bin/Release/citra-qt.app/Contents/MacOS/citra-qt -output ../build/bin/Release/citra-qt.app/Contents/MacOS/citra-qt
+lipo -create build-64/bin/Release/citra-qt.app/Contents/MacOS/citra-qt build-arm64/bin/Release/citra-qt.app/Contents/MacOS/citra-qt -output build/bin/Release/citra-qt.app/Contents/MacOS/citra-qt
 
 ccache -s
 
