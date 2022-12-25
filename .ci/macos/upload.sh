@@ -36,7 +36,8 @@ cp $VULKAN_LOADER_PATH/lib/libvulkan.dylib $BUNDLE_LIB_PATH
 cp $MOLTENVK_PATH/lib/libMoltenVK.dylib $BUNDLE_LIB_PATH
 cp -r /usr/local/loader $BUNDLE_RESOURCES_PATH
 install_name_tool -add_rpath "@loader_path/../lib/" $BUNDLE_EXECUTABLE_PATH
-
+#bundle ffmpeg
+cp -r $(pwd)/FFmpeg-shared-n5.0.1-OSX-universal/lib/* $BUNDLE_LIB_PATH
 # workaround for libc++
 install_name_tool -change @loader_path/../Frameworks/libc++.1.0.dylib /usr/lib/libc++.1.dylib $BUNDLE_EXECUTABLE_PATH
 install_name_tool -change @loader_path/libs/libc++.1.0.dylib /usr/lib/libc++.1.dylib $CITRA_STANDALONE_PATH
