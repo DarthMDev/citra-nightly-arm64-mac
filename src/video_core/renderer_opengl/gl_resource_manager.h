@@ -109,7 +109,7 @@ public:
         return *this;
     }
 
-    void Create(const char* source, GLenum type);
+    void Create(std::string_view source, GLenum type);
 
     void Release();
 
@@ -136,7 +136,10 @@ public:
     void Create(bool separable_program, const std::vector<GLuint>& shaders);
 
     /// Creates a new program from given shader soruce code
-    void Create(const char* vert_shader, const char* frag_shader);
+    void Create(std::string_view vert_shader, std::string_view frag_shader);
+
+    /// Creates a new compute shader program
+    void Create(std::string_view compute_shader);
 
     /// Creates a new compute shader program
     void Create(const std::string_view compute_shader);

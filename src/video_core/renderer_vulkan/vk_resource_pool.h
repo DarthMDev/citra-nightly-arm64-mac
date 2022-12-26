@@ -45,7 +45,7 @@ protected:
     MasterSemaphore* master_semaphore{nullptr};
     std::size_t grow_step = 0;     ///< Number of new resources created after an overflow
     std::size_t hint_iterator = 0; ///< Hint to where the next free resources is likely to be found
-    std::vector<u64> ticks;   ///< Ticks for each resource
+    std::vector<u64> ticks;        ///< Ticks for each resource
 };
 
 class CommandPool final : public ResourcePool {

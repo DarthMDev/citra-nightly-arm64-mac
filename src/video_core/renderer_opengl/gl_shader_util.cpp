@@ -13,7 +13,7 @@
 
 namespace OpenGL {
 
-GLuint LoadShader(const char* source, GLenum type) {
+GLuint LoadShader(std::string_view source, GLenum type) {
     const std::string version = GLES ? R"(
 #version 320 es
 #define CITRA_GLES
@@ -46,7 +46,7 @@ GLuint LoadShader(const char* source, GLenum type) {
         UNREACHABLE();
     }
 
-    std::array<const char*, 2> src_arr{version.data(), source};
+    std::array<const char*, 2> src_arr{version.data(), source.data()};
     GLuint shader_id = glCreateShader(type);
     glShaderSource(shader_id, static_cast<GLsizei>(src_arr.size()), src_arr.data(), nullptr);
     LOG_DEBUG(Render_OpenGL, "Compiling {} shader...", debug_type);
@@ -71,7 +71,7 @@ GLuint LoadShader(const char* source, GLenum type) {
     return shader_id;
 }
 
-GLuint LoadProgram(bool separable_program, const std::vector<GLuint>& shaders) {
+GLuint LoadProgram(bool separable_program, std::span<const GLuint> shaders) {
     // Link the program
     LOG_DEBUG(Render_OpenGL, "Linking program...");
 

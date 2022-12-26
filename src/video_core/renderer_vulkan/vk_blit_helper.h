@@ -19,8 +19,7 @@ class Surface;
 
 class BlitHelper {
 public:
-    BlitHelper(const Instance& instance, Scheduler& scheduler,
-               DescriptorManager& desc_manager);
+    BlitHelper(const Instance& instance, Scheduler& scheduler, DescriptorManager& desc_manager);
     ~BlitHelper();
 
     /// Blits D24S8 pixel data to the provided buffer

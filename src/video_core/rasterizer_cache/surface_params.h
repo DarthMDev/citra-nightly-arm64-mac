@@ -15,8 +15,6 @@ namespace VideoCore {
 
 using SurfaceInterval = boost::icl::right_open_interval<PAddr>;
 
-enum class TextureType { Texture2D = 0, CubeMap = 1 };
-
 class SurfaceParams {
 public:
     /// Surface match traits

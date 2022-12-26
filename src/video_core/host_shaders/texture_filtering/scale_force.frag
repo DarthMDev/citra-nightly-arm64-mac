@@ -1,5 +1,3 @@
-//? #version 320 es
-
 // from https://github.com/BreadFish64/ScaleFish/tree/master/scale_force
 
 // MIT License
@@ -24,13 +22,18 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
+// Copyright 2022 Citra Emulator Project
+// Licensed under GPLv2 or any later version
+// Refer to the license.txt file included.
+
+//? #version 320 es
+
 precision mediump float;
 
-in vec2 tex_coord;
+layout(location = 0) in vec2 tex_coord;
+layout(location = 0) out vec4 frag_color;
 
-out vec4 frag_color;
-
-uniform sampler2D input_texture;
+layout(binding = 0) uniform sampler2D input_texture;
 
 vec2 tex_size;
 vec2 inv_tex_size;

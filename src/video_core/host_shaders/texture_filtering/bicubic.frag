@@ -1,11 +1,14 @@
+// Copyright 2022 Citra Emulator Project
+// Licensed under GPLv2 or any later version
+// Refer to the license.txt file included.
+
 //? #version 330
 precision mediump float;
 
-in vec2 tex_coord;
+layout(location = 0) in vec2 tex_coord;
+layout(location = 0) out vec4 frag_color;
 
-out vec4 frag_color;
-
-uniform sampler2D input_texture;
+layout(binding = 0) uniform sampler2D input_texture;
 
 // from http://www.java-gaming.org/index.php?topic=35123.0
 vec4 cubic(float v) {
@@ -18,9 +21,9 @@ vec4 cubic(float v) {
     return vec4(x, y, z, w) * (1.0 / 6.0);
 }
 
-vec4 textureBicubic(sampler2D sampler, vec2 texCoords) {
+vec4 textureBicubic(sampler2D tex_sampler, vec2 texCoords) {
 
-    vec2 texSize = vec2(textureSize(sampler, 0));
+    vec2 texSize = vec2(textureSize(tex_sampler, 0));
     vec2 invTexSize = 1.0 / texSize;
 
     texCoords = texCoords * texSize - 0.5;
@@ -38,10 +41,10 @@ vec4 textureBicubic(sampler2D sampler, vec2 texCoords) {
 
     offset *= invTexSize.xxyy;
 
-    vec4 sample0 = texture(sampler, offset.xz);
-    vec4 sample1 = texture(sampler, offset.yz);
-    vec4 sample2 = texture(sampler, offset.xw);
-    vec4 sample3 = texture(sampler, offset.yw);
+    vec4 sample0 = texture(tex_sampler, offset.xz);
+    vec4 sample1 = texture(tex_sampler, offset.yz);
+    vec4 sample2 = texture(tex_sampler, offset.xw);
+    vec4 sample3 = texture(tex_sampler, offset.yw);
 
     float sx = s.x / (s.x + s.y);
     float sy = s.z / (s.z + s.w);

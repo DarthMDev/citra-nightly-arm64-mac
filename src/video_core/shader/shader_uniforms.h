@@ -13,7 +13,7 @@ struct ShaderRegs;
 
 namespace Pica::Shader {
 
-class ShaderSetup;
+struct ShaderSetup;
 
 enum class UniformBindings : u32 { Common, VS, GS };
 

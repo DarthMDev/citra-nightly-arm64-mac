@@ -10,8 +10,8 @@
 #include "video_core/pica_state.h"
 #include "video_core/regs_framebuffer.h"
 #include "video_core/renderer_opengl/gl_shader_decompiler.h"
-#include "video_core/renderer_vulkan/vk_shader_gen.h"
 #include "video_core/renderer_vulkan/vk_instance.h"
+#include "video_core/renderer_vulkan/vk_shader_gen.h"
 #include "video_core/video_core.h"
 
 using Pica::FramebufferRegs;
@@ -107,8 +107,8 @@ PicaFSConfig::PicaFSConfig(const Pica::Regs& regs, const Instance& instance) {
     state.depthmap_enable.Assign(regs.rasterizer.depthmap_enable);
 
     state.alpha_test_func.Assign(regs.framebuffer.output_merger.alpha_test.enable
-                                ? regs.framebuffer.output_merger.alpha_test.func.Value()
-                                : FramebufferRegs::CompareFunc::Always);
+                                     ? regs.framebuffer.output_merger.alpha_test.func.Value()
+                                     : FramebufferRegs::CompareFunc::Always);
 
     state.texture0_type.Assign(regs.texturing.texture0.type);
 
@@ -116,7 +116,7 @@ PicaFSConfig::PicaFSConfig(const Pica::Regs& regs, const Instance& instance) {
 
     // Emulate logic op in the shader if not supported. This is mostly for mobile GPUs
     const bool emulate_logic_op = instance.NeedsLogicOpEmulation() &&
-            !Pica::g_state.regs.framebuffer.output_merger.alphablend_enable;
+                                  !Pica::g_state.regs.framebuffer.output_merger.alphablend_enable;
 
     state.emulate_logic_op.Assign(emulate_logic_op);
     if (emulate_logic_op) {
@@ -141,9 +141,9 @@ PicaFSConfig::PicaFSConfig(const Pica::Regs& regs, const Instance& instance) {
     state.fog_mode.Assign(regs.texturing.fog_mode);
     state.fog_flip.Assign(regs.texturing.fog_flip != 0);
 
-    state.combiner_buffer_input.Assign(regs.texturing.tev_combiner_buffer_input.update_mask_rgb.Value() |
-                                  regs.texturing.tev_combiner_buffer_input.update_mask_a.Value()
-                                      << 4);
+    state.combiner_buffer_input.Assign(
+        regs.texturing.tev_combiner_buffer_input.update_mask_rgb.Value() |
+        regs.texturing.tev_combiner_buffer_input.update_mask_a.Value() << 4);
 
     // Fragment lighting
 
@@ -155,14 +155,18 @@ PicaFSConfig::PicaFSConfig(const Pica::Regs& regs, const Instance& instance) {
         const auto& light = regs.lighting.light[num];
         state.lighting.light[light_index].num.Assign(num);
         state.lighting.light[light_index].directional.Assign(light.config.directional != 0);
-        state.lighting.light[light_index].two_sided_diffuse.Assign(light.config.two_sided_diffuse != 0);
-        state.lighting.light[light_index].geometric_factor_0.Assign(light.config.geometric_factor_0 != 0);
-        state.lighting.light[light_index].geometric_factor_1.Assign(light.config.geometric_factor_1 != 0);
+        state.lighting.light[light_index].two_sided_diffuse.Assign(light.config.two_sided_diffuse !=
+                                                                   0);
+        state.lighting.light[light_index].geometric_factor_0.Assign(
+            light.config.geometric_factor_0 != 0);
+        state.lighting.light[light_index].geometric_factor_1.Assign(
+            light.config.geometric_factor_1 != 0);
         state.lighting.light[light_index].dist_atten_enable.Assign(
             !regs.lighting.IsDistAttenDisabled(num));
         state.lighting.light[light_index].spot_atten_enable.Assign(
             !regs.lighting.IsSpotAttenDisabled(num));
-        state.lighting.light[light_index].shadow_enable.Assign(!regs.lighting.IsShadowDisabled(num));
+        state.lighting.light[light_index].shadow_enable.Assign(
+            !regs.lighting.IsShadowDisabled(num));
     }
 
     state.lighting.lut_d0.enable.Assign(regs.lighting.config1.disable_lut_d0 == 0);
@@ -238,11 +242,10 @@ PicaFSConfig::PicaFSConfig(const Pica::Regs& regs, const Instance& instance) {
     }
 
     state.shadow_rendering.Assign(regs.framebuffer.output_merger.fragment_operation_mode ==
-                             FramebufferRegs::FragmentOperationMode::Shadow);
+                                  FramebufferRegs::FragmentOperationMode::Shadow);
 
     state.shadow_texture_orthographic.Assign(regs.texturing.shadow.orthographic != 0);
 }
-
 
 void PicaShaderConfigCommon::Init(const Pica::ShaderRegs& regs, Pica::Shader::ShaderSetup& setup) {
     program_hash = setup.GetProgramCodeHash();
@@ -510,7 +513,8 @@ static void AppendColorCombiner(std::string& out, TevStageConfig::Operation oper
         out += "color_results_1 + color_results_2 - vec3(0.5)";
         break;
     case Operation::Lerp:
-        out += "color_results_1 * color_results_3 + color_results_2 * (vec3(1.0) - color_results_3)";
+        out +=
+            "color_results_1 * color_results_3 + color_results_2 * (vec3(1.0) - color_results_3)";
         break;
     case Operation::Subtract:
         out += "color_results_1 - color_results_2";
@@ -523,8 +527,7 @@ static void AppendColorCombiner(std::string& out, TevStageConfig::Operation oper
         break;
     case Operation::Dot3_RGB:
     case Operation::Dot3_RGBA:
-        out +=
-            "vec3(dot(color_results_1 - vec3(0.5), color_results_2 - vec3(0.5)) * 4.0)";
+        out += "vec3(dot(color_results_1 - vec3(0.5), color_results_2 - vec3(0.5)) * 4.0)";
         break;
     default:
         out += "vec3(0.0)";
@@ -1566,7 +1569,8 @@ do {
             // with fragment shader alone, so we emulate this behavior with the color mask.
             break;
         default:
-            LOG_CRITICAL(HW_GPU, "Unhandled logic_op {:x}", static_cast<u32>(state.logic_op.Value()));
+            LOG_CRITICAL(HW_GPU, "Unhandled logic_op {:x}",
+                         static_cast<u32>(state.logic_op.Value()));
             UNIMPLEMENTED();
         }
     }
@@ -1672,7 +1676,8 @@ layout (set = 0, binding = 0, std140) uniform vs_config {
                 prefix = "u";
                 break;
             default:
-                LOG_CRITICAL(Render_Vulkan, "Unknown attrib format {}", config.state.attrib_types[i]);
+                LOG_CRITICAL(Render_Vulkan, "Unknown attrib format {}",
+                             config.state.attrib_types[i]);
                 UNREACHABLE();
             }
 
@@ -1684,7 +1689,8 @@ layout (set = 0, binding = 0, std140) uniform vs_config {
     // Some 3-component attributes might be emulated by breaking them to vec2 + scalar.
     // Define them here and combine them below
     for (std::size_t i = 0; i < used_regs.size(); ++i) {
-        if (const u32 location = config.state.emulated_attrib_locations[i]; location != 0 && used_regs[i]) {
+        if (const u32 location = config.state.emulated_attrib_locations[i];
+            location != 0 && used_regs[i]) {
             std::string_view type;
             switch (config.state.attrib_types[i]) {
             case Pica::PipelineRegs::VertexAttributeFormat::FLOAT:
@@ -1698,11 +1704,13 @@ layout (set = 0, binding = 0, std140) uniform vs_config {
                 type = "uint";
                 break;
             default:
-                LOG_CRITICAL(Render_Vulkan, "Unknown attrib format {}", config.state.attrib_types[i]);
+                LOG_CRITICAL(Render_Vulkan, "Unknown attrib format {}",
+                             config.state.attrib_types[i]);
                 UNREACHABLE();
             }
 
-            out += fmt::format("layout(location = {}) in {} vs_in_typed_reg{}_part2;\n", location, type, i);
+            out += fmt::format("layout(location = {}) in {} vs_in_typed_reg{}_part2;\n", location,
+                               type, i);
         }
     }
 
@@ -1712,7 +1720,9 @@ layout (set = 0, binding = 0, std140) uniform vs_config {
     for (std::size_t i = 0; i < used_regs.size(); ++i) {
         if (used_regs[i]) {
             if (config.state.emulated_attrib_locations[i] != 0) {
-                out += fmt::format("vec4 vs_in_reg{0} = vec4(vec2(vs_in_typed_reg{0}), float(vs_in_typed_reg{0}_part2), 0.f);\n", i);
+                out += fmt::format("vec4 vs_in_reg{0} = vec4(vec2(vs_in_typed_reg{0}), "
+                                   "float(vs_in_typed_reg{0}_part2), 0.f);\n",
+                                   i);
             } else {
                 out += fmt::format("vec4 vs_in_reg{0} = vec4(vs_in_typed_reg{0});\n", i);
             }

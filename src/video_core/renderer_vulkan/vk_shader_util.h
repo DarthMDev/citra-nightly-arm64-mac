@@ -13,6 +13,6 @@ enum class ShaderOptimization { High = 0, Debug = 1 };
 vk::ShaderModule Compile(std::string_view code, vk::ShaderStageFlagBits stage, vk::Device device,
                          ShaderOptimization level);
 
-vk::ShaderModule CompileSPV(std::vector<u32> code, vk::Device device);
+vk::ShaderModule CompileSPV(std::span<const u32> code, vk::Device device);
 
 } // namespace Vulkan

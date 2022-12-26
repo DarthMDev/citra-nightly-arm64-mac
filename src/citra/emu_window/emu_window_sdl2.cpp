@@ -12,9 +12,9 @@
 #include "citra/emu_window/emu_window_sdl2.h"
 #include "common/logging/log.h"
 #include "common/scm_rev.h"
+#include "common/settings.h"
 #include "core/3ds.h"
 #include "core/core.h"
-#include "core/settings.h"
 #include "input_common/keyboard.h"
 #include "input_common/main.h"
 #include "input_common/motion_emu.h"
@@ -137,7 +137,8 @@ void EmuWindow_SDL2::Fullscreen() {
 
 EmuWindow_SDL2::EmuWindow_SDL2(bool fullscreen, bool is_secondary) : EmuWindow(is_secondary) {
     // Initialize the window
-    const bool is_opengles = Settings::values.graphics_api == Settings::GraphicsAPI::OpenGLES;
+    const bool is_opengles =
+        Settings::values.graphics_api.GetValue() == Settings::GraphicsAPI::OpenGLES;
     if (is_opengles) {
         SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
         SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 2);

@@ -3,6 +3,7 @@
 // Refer to the license.txt file included.
 
 #include <clocale>
+#include <filesystem>
 #include <fstream>
 #include <memory>
 #include <thread>
@@ -28,6 +29,7 @@
 #include "citra_qt/compatibility_list.h"
 #include "citra_qt/configuration/config.h"
 #include "citra_qt/configuration/configure_dialog.h"
+#include "citra_qt/configuration/configure_per_game.h"
 #include "citra_qt/debugger/console.h"
 #include "citra_qt/debugger/graphics/graphics.h"
 #include "citra_qt/debugger/graphics/graphics_breakpoints.h"
@@ -66,6 +68,7 @@
 #ifdef ARCHITECTURE_x86_64
 #include "common/x64/cpu_detect.h"
 #endif
+#include "common/settings.h"
 #include "core/core.h"
 #include "core/dumping/backend.h"
 #include "core/file_sys/archive_extsavedata.h"
@@ -76,7 +79,6 @@
 #include "core/loader/loader.h"
 #include "core/movie.h"
 #include "core/savestate.h"
-#include "core/settings.h"
 #include "game_list_p.h"
 #include "input_common/main.h"
 #include "network/network_settings.h"
@@ -121,11 +123,13 @@ enum class CalloutFlag : uint32_t {
 };
 
 void GMainWindow::ShowTelemetryCallout() {
-    if (UISettings::values.callout_flags & static_cast<uint32_t>(CalloutFlag::Telemetry)) {
+    if (UISettings::values.callout_flags.GetValue() &
+        static_cast<uint32_t>(CalloutFlag::Telemetry)) {
         return;
     }
 
-    UISettings::values.callout_flags |= static_cast<uint32_t>(CalloutFlag::Telemetry);
+    UISettings::values.callout_flags =
+        UISettings::values.callout_flags.GetValue() | static_cast<uint32_t>(CalloutFlag::Telemetry);
     const QString telemetry_message =
         tr("<a href='https://citra-emu.org/entry/telemetry-and-why-thats-a-good-thing/'>Anonymous "
            "data is collected</a> to help improve Citra. "
@@ -140,7 +144,7 @@ const int GMainWindow::max_recent_files_item;
 
 static void InitializeLogging() {
     Log::Filter log_filter;
-    log_filter.ParseFilterString(Settings::values.log_filter);
+    log_filter.ParseFilterString(Settings::values.log_filter.GetValue());
     Log::SetGlobalFilter(log_filter);
 
     const std::string& log_dir = FileUtil::GetUserPath(FileUtil::UserPath::LogDir);
@@ -172,7 +176,7 @@ GMainWindow::GMainWindow()
     default_theme_paths = QIcon::themeSearchPaths();
     UpdateUITheme();
 
-    SetDiscordEnabled(UISettings::values.enable_discord_presence);
+    SetDiscordEnabled(UISettings::values.enable_discord_presence.GetValue());
     discord_rpc->Update();
 
     Network::Init();
@@ -570,8 +574,7 @@ void GMainWindow::InitializeHotkeys() {
             });
     connect(hotkey_registry.GetHotkey(main_window, QStringLiteral("Toggle Alternate Speed"), this),
             &QShortcut::activated, this, [&] {
-                Settings::values.use_frame_limit_alternate =
-                    !Settings::values.use_frame_limit_alternate;
+                Settings::values.frame_limit.SetGlobal(!Settings::values.frame_limit.UsingGlobal());
                 UpdateStatusBar();
             });
     connect(hotkey_registry.GetHotkey(main_window, QStringLiteral("Toggle Texture Dumping"), this),
@@ -582,42 +585,25 @@ void GMainWindow::InitializeHotkeys() {
     static constexpr u16 SPEED_LIMIT_STEP = 5;
     connect(hotkey_registry.GetHotkey(main_window, QStringLiteral("Increase Speed Limit"), this),
             &QShortcut::activated, this, [&] {
-                if (Settings::values.use_frame_limit_alternate) {
-                    if (Settings::values.frame_limit_alternate == 0) {
-                        return;
-                    }
-                    if (Settings::values.frame_limit_alternate < 995 - SPEED_LIMIT_STEP) {
-                        Settings::values.frame_limit_alternate += SPEED_LIMIT_STEP;
-                    } else {
-                        Settings::values.frame_limit_alternate = 0;
-                    }
+                if (Settings::values.frame_limit.GetValue() == 0) {
+                    return;
+                }
+                if (Settings::values.frame_limit.GetValue() < 995 - SPEED_LIMIT_STEP) {
+                    Settings::values.frame_limit.SetValue(Settings::values.frame_limit.GetValue() +
+                                                          SPEED_LIMIT_STEP);
                 } else {
-                    if (Settings::values.frame_limit == 0) {
-                        return;
-                    }
-                    if (Settings::values.frame_limit < 995 - SPEED_LIMIT_STEP) {
-                        Settings::values.frame_limit += SPEED_LIMIT_STEP;
-                    } else {
-                        Settings::values.frame_limit = 0;
-                    }
+                    Settings::values.frame_limit = 0;
                 }
                 UpdateStatusBar();
             });
     connect(hotkey_registry.GetHotkey(main_window, QStringLiteral("Decrease Speed Limit"), this),
             &QShortcut::activated, this, [&] {
-                if (Settings::values.use_frame_limit_alternate) {
-                    if (Settings::values.frame_limit_alternate == 0) {
-                        Settings::values.frame_limit_alternate = 995;
-                    } else if (Settings::values.frame_limit_alternate > SPEED_LIMIT_STEP) {
-                        Settings::values.frame_limit_alternate -= SPEED_LIMIT_STEP;
-                    }
-                } else {
-                    if (Settings::values.frame_limit == 0) {
-                        Settings::values.frame_limit = 995;
-                    } else if (Settings::values.frame_limit > SPEED_LIMIT_STEP) {
-                        Settings::values.frame_limit -= SPEED_LIMIT_STEP;
-                        UpdateStatusBar();
-                    }
+                if (Settings::values.frame_limit.GetValue() == 0) {
+                    Settings::values.frame_limit = 995;
+                } else if (Settings::values.frame_limit.GetValue() > SPEED_LIMIT_STEP) {
+                    Settings::values.frame_limit.SetValue(Settings::values.frame_limit.GetValue() -
+                                                          SPEED_LIMIT_STEP);
+                    UpdateStatusBar();
                 }
                 UpdateStatusBar();
             });
@@ -677,25 +663,26 @@ void GMainWindow::RestoreUIState() {
     render_window->restoreGeometry(UISettings::values.renderwindow_geometry);
 #if MICROPROFILE_ENABLED
     microProfileDialog->restoreGeometry(UISettings::values.microprofile_geometry);
-    microProfileDialog->setVisible(UISettings::values.microprofile_visible);
+    microProfileDialog->setVisible(UISettings::values.microprofile_visible.GetValue());
 #endif
     ui->action_Cheats->setEnabled(false);
 
     game_list->LoadInterfaceLayout();
 
-    ui->action_Single_Window_Mode->setChecked(UISettings::values.single_window_mode);
+    ui->action_Single_Window_Mode->setChecked(UISettings::values.single_window_mode.GetValue());
     ToggleWindowMode();
 
-    ui->action_Fullscreen->setChecked(UISettings::values.fullscreen);
+    ui->action_Fullscreen->setChecked(UISettings::values.fullscreen.GetValue());
     SyncMenuUISettings();
 
-    ui->action_Display_Dock_Widget_Headers->setChecked(UISettings::values.display_titlebar);
+    ui->action_Display_Dock_Widget_Headers->setChecked(
+        UISettings::values.display_titlebar.GetValue());
     OnDisplayTitleBars(ui->action_Display_Dock_Widget_Headers->isChecked());
 
-    ui->action_Show_Filter_Bar->setChecked(UISettings::values.show_filter_bar);
+    ui->action_Show_Filter_Bar->setChecked(UISettings::values.show_filter_bar.GetValue());
     game_list->SetFilterVisible(ui->action_Show_Filter_Bar->isChecked());
 
-    ui->action_Show_Status_Bar->setChecked(UISettings::values.show_status_bar);
+    ui->action_Show_Status_Bar->setChecked(UISettings::values.show_status_bar.GetValue());
     statusBar()->setVisible(ui->action_Show_Status_Bar->isChecked());
 }
 
@@ -730,6 +717,9 @@ void GMainWindow::ConnectWidgetEvents() {
     connect(game_list, &GameList::ShowList, this, &GMainWindow::OnGameListShowList);
     connect(game_list, &GameList::PopulatingCompleted, this,
             [this] { multiplayer_state->UpdateGameList(game_list->GetModel()); });
+
+    connect(game_list, &GameList::OpenPerGameGeneralRequested, this,
+            &GMainWindow::OnGameListOpenPerGameProperties);
 
     connect(this, &GMainWindow::EmulationStarting, render_window,
             &GRenderWindow::OnEmulationStarting);
@@ -766,6 +756,8 @@ void GMainWindow::ConnectMenuEvents() {
     connect(ui->action_Report_Compatibility, &QAction::triggered, this,
             &GMainWindow::OnMenuReportCompatibility);
     connect(ui->action_Configure, &QAction::triggered, this, &GMainWindow::OnConfigure);
+    connect(ui->action_Configure_Current_Game, &QAction::triggered, this,
+            &GMainWindow::OnConfigurePerGame);
     connect(ui->action_Cheats, &QAction::triggered, this, &GMainWindow::OnCheats);
 
     // View
@@ -1087,6 +1079,22 @@ void GMainWindow::BootGame(const QString& filename) {
         Core::Movie::GetInstance().PrepareForPlayback(movie_playback_path.toStdString());
     }
 
+    u64 title_id{0};
+    const std::string path = filename.toStdString();
+    const auto loader = Loader::GetLoader(path);
+
+    if (loader != nullptr && loader->ReadProgramId(title_id) == Loader::ResultStatus::Success) {
+        // Load per game settings
+        const std::string name{FileUtil::GetFilename(filename.toStdString())};
+        const std::string config_file_name =
+            title_id == 0 ? name : fmt::format("{:016X}", title_id);
+        Config per_game_config(config_file_name, Config::ConfigType::PerGameConfig);
+        Settings::Apply();
+
+        LOG_INFO(Frontend, "Using per game config file for title id {}", config_file_name);
+        Settings::LogSettings();
+    }
+
     // Save configurations
     UpdateUISettings();
     game_list->SaveInterfaceLayout();
@@ -1240,6 +1248,7 @@ void GMainWindow::ShutdownGame() {
     ui->action_Stop->setEnabled(false);
     ui->action_Restart->setEnabled(false);
     ui->action_Cheats->setEnabled(false);
+    ui->action_Configure_Current_Game->setEnabled(false);
     ui->action_Load_Amiibo->setEnabled(false);
     ui->action_Remove_Amiibo->setEnabled(false);
     ui->action_Report_Compatibility->setEnabled(false);
@@ -1422,6 +1431,13 @@ void GMainWindow::OnGameListOpenFolder(u64 data_id, GameListOpenTarget target) {
                            data_id);
         break;
     }
+    case GameListOpenTarget::DLC_DATA: {
+        open_target = "DLC Data";
+        path = fmt::format("{}Nintendo 3DS/00000000000000000000000000000000/"
+                           "00000000000000000000000000000000/title/0004008c/{:08x}/content/",
+                           FileUtil::GetUserPath(FileUtil::UserPath::SDMCDir), data_id);
+        break;
+    }
     case GameListOpenTarget::SHADER_CACHE: {
         open_target = "Shader Cache";
         path = FileUtil::GetUserPath(FileUtil::UserPath::ShaderDir);
@@ -1537,6 +1553,19 @@ void GMainWindow::OnGameListShowList(bool show) {
     game_list->setVisible(show);
     game_list_placeholder->setVisible(!show);
 };
+
+void GMainWindow::OnGameListOpenPerGameProperties(const QString& file) {
+    const auto loader = Loader::GetLoader(file.toStdString());
+
+    u64 title_id{};
+    if (!loader || loader->ReadProgramId(title_id) != Loader::ResultStatus::Success) {
+        QMessageBox::information(this, tr("Properties"),
+                                 tr("The game properties could not be loaded."));
+        return;
+    }
+
+    OpenPerGameConfiguration(title_id, file);
+}
 
 void GMainWindow::OnMenuLoadFile() {
     const QString extensions = QStringLiteral("*.").append(
@@ -1663,6 +1692,7 @@ void GMainWindow::OnStartGame() {
     ui->action_Stop->setEnabled(true);
     ui->action_Restart->setEnabled(true);
     ui->action_Cheats->setEnabled(true);
+    ui->action_Configure_Current_Game->setEnabled(true);
     ui->action_Load_Amiibo->setEnabled(true);
     ui->action_Report_Compatibility->setEnabled(true);
     ui->action_Capture_Screenshot->setEnabled(true);
@@ -1685,6 +1715,7 @@ void GMainWindow::OnPauseGame() {
 
 void GMainWindow::OnStopGame() {
     ShutdownGame();
+    Settings::RestoreGlobalState(false);
 }
 
 void GMainWindow::OnLoadComplete() {
@@ -1778,7 +1809,7 @@ void GMainWindow::UpdateSecondaryWindowVisibility() {
     if (!emulation_running) {
         return;
     }
-    if (Settings::values.layout_option == Settings::LayoutOption::SeparateWindows) {
+    if (Settings::values.layout_option.GetValue() == Settings::LayoutOption::SeparateWindows) {
         secondary_window->RestoreGeometry();
         secondary_window->show();
     } else {
@@ -1809,7 +1840,7 @@ void GMainWindow::ChangeScreenLayout() {
 
 void GMainWindow::ToggleScreenLayout() {
     const Settings::LayoutOption new_layout = []() {
-        switch (Settings::values.layout_option) {
+        switch (Settings::values.layout_option.GetValue()) {
         case Settings::LayoutOption::Default:
             return Settings::LayoutOption::SingleScreen;
         case Settings::LayoutOption::SingleScreen:
@@ -1821,7 +1852,8 @@ void GMainWindow::ToggleScreenLayout() {
         case Settings::LayoutOption::SeparateWindows:
             return Settings::LayoutOption::Default;
         default:
-            LOG_ERROR(Frontend, "Unknown layout option {}", Settings::values.layout_option);
+            LOG_ERROR(Frontend, "Unknown layout option {}",
+                      Settings::values.layout_option.GetValue());
             return Settings::LayoutOption::Default;
         }
     }();
@@ -1873,6 +1905,7 @@ void GMainWindow::OnLoadState() {
 }
 
 void GMainWindow::OnConfigure() {
+    Settings::SetConfiguringGlobal(true);
     ConfigureDialog configureDialog(this, hotkey_registry,
                                     !multiplayer_state->IsHostingPublicRoom());
     connect(&configureDialog, &ConfigureDialog::LanguageChanged, this,
@@ -1881,15 +1914,15 @@ void GMainWindow::OnConfigure() {
     const int old_input_profile_index = Settings::values.current_input_profile_index;
     const auto old_input_profiles = Settings::values.input_profiles;
     const auto old_touch_from_button_maps = Settings::values.touch_from_button_maps;
-    const bool old_discord_presence = UISettings::values.enable_discord_presence;
+    const bool old_discord_presence = UISettings::values.enable_discord_presence.GetValue();
     auto result = configureDialog.exec();
     if (result == QDialog::Accepted) {
         configureDialog.ApplyConfiguration();
         InitializeHotkeys();
         if (UISettings::values.theme != old_theme)
             UpdateUITheme();
-        if (UISettings::values.enable_discord_presence != old_discord_presence)
-            SetDiscordEnabled(UISettings::values.enable_discord_presence);
+        if (UISettings::values.enable_discord_presence.GetValue() != old_discord_presence)
+            SetDiscordEnabled(UISettings::values.enable_discord_presence.GetValue());
         if (!multiplayer_state->IsHostingPublicRoom())
             multiplayer_state->UpdateCredentials();
         emit UpdateThemedIcons();
@@ -2067,24 +2100,26 @@ void GMainWindow::OnSaveMovie() {
 
 void GMainWindow::OnCaptureScreenshot() {
     OnPauseGame();
-    QString path = UISettings::values.screenshot_path;
-    if (!FileUtil::IsDirectory(path.toStdString())) {
-        if (!FileUtil::CreateFullPath(path.toStdString())) {
+    std::string path = UISettings::values.screenshot_path.GetValue();
+    if (!FileUtil::IsDirectory(path)) {
+        if (!FileUtil::CreateFullPath(path)) {
             QMessageBox::information(this, tr("Invalid Screenshot Directory"),
                                      tr("Cannot create specified screenshot directory. Screenshot "
                                         "path is set back to its default value."));
-            path = QString::fromStdString(FileUtil::GetUserPath(FileUtil::UserPath::UserDir));
-            path.append(QStringLiteral("screenshots/"));
+            path = FileUtil::GetUserPath(FileUtil::UserPath::UserDir);
+            path.append("screenshots/");
             UISettings::values.screenshot_path = path;
         };
     }
-    const QString filename = game_title.remove(QRegularExpression(QStringLiteral("[\\/:?\"<>|]")));
-    const QString timestamp =
-        QDateTime::currentDateTime().toString(QStringLiteral("dd.MM.yy_hh.mm.ss.z"));
-    path.append(QStringLiteral("/%1_%2.png").arg(filename, timestamp));
+    const std::string filename =
+        game_title.remove(QRegularExpression(QStringLiteral("[\\/:?\"<>|]"))).toStdString();
+    const std::string timestamp =
+        QDateTime::currentDateTime().toString(QStringLiteral("dd.MM.yy_hh.mm.ss.z")).toStdString();
+    path.append(fmt::format("/{}_{}.png", filename, timestamp));
 
     auto* const screenshot_window = secondary_window->HasFocus() ? secondary_window : render_window;
-    screenshot_window->CaptureScreenshot(UISettings::values.screenshot_resolution_factor, path);
+    screenshot_window->CaptureScreenshot(UISettings::values.screenshot_resolution_factor.GetValue(),
+                                         QString::fromStdString(path));
     OnStartGame();
 }
 
@@ -2176,22 +2211,12 @@ void GMainWindow::UpdateStatusBar() {
 
     auto results = Core::System::GetInstance().GetAndResetPerfStats();
 
-    if (Settings::values.use_frame_limit_alternate) {
-        if (Settings::values.frame_limit_alternate == 0) {
-            emu_speed_label->setText(
-                tr("Speed: %1%").arg(results.emulation_speed * 100.0, 0, 'f', 0));
-
-        } else {
-            emu_speed_label->setText(tr("Speed: %1% / %2%")
-                                         .arg(results.emulation_speed * 100.0, 0, 'f', 0)
-                                         .arg(Settings::values.frame_limit_alternate));
-        }
-    } else if (Settings::values.frame_limit == 0) {
+    if (Settings::values.frame_limit.GetValue() == 0) {
         emu_speed_label->setText(tr("Speed: %1%").arg(results.emulation_speed * 100.0, 0, 'f', 0));
     } else {
         emu_speed_label->setText(tr("Speed: %1% / %2%")
                                      .arg(results.emulation_speed * 100.0, 0, 'f', 0)
-                                     .arg(Settings::values.frame_limit));
+                                     .arg(Settings::values.frame_limit.GetValue()));
     }
     game_fps_label->setText(tr("Game: %1 FPS").arg(results.game_fps, 0, 'f', 0));
     emu_frametime_label->setText(tr("Frame: %1 ms").arg(results.frametime * 1000.0, 0, 'f', 2));
@@ -2202,16 +2227,22 @@ void GMainWindow::UpdateStatusBar() {
 }
 
 void GMainWindow::HideMouseCursor() {
-    if (emu_thread == nullptr || UISettings::values.hide_mouse == false) {
+    if (emu_thread == nullptr || !UISettings::values.hide_mouse.GetValue()) {
         mouse_hide_timer.stop();
         ShowMouseCursor();
         return;
     }
     render_window->setCursor(QCursor(Qt::BlankCursor));
+    secondary_window->setCursor(QCursor(Qt::BlankCursor));
+    if (UISettings::values.single_window_mode.GetValue()) {
+        setCursor(QCursor(Qt::BlankCursor));
+    }
 }
 
 void GMainWindow::ShowMouseCursor() {
+    unsetCursor();
     render_window->unsetCursor();
+    secondary_window->unsetCursor();
     if (emu_thread != nullptr && UISettings::values.hide_mouse) {
         mouse_hide_timer.start();
     }
@@ -2224,7 +2255,7 @@ void GMainWindow::UpdateAPIIndicator(bool override) {
     static std::array graphics_api_colors = {QStringLiteral("#00ccdd"), QStringLiteral("#ba2a8d"),
                                              QStringLiteral("#91242a")};
 
-    u32 api_index = static_cast<u32>(Settings::values.graphics_api);
+    u32 api_index = static_cast<u32>(Settings::values.graphics_api.GetValue());
     if (override) {
         api_index = (api_index + 1) % graphics_apis.size();
         Settings::values.graphics_api = static_cast<Settings::GraphicsAPI>(api_index);
@@ -2493,6 +2524,35 @@ void GMainWindow::OnLanguageChanged(const QString& locale) {
         ui->action_Start->setText(tr("Continue"));
 }
 
+void GMainWindow::OnConfigurePerGame() {
+    u64 title_id{};
+    Core::System::GetInstance().GetAppLoader().ReadProgramId(title_id);
+    OpenPerGameConfiguration(title_id, game_path);
+}
+
+void GMainWindow::OpenPerGameConfiguration(u64 title_id, const QString& file_name) {
+    Core::System& system = Core::System::GetInstance();
+
+    Settings::SetConfiguringGlobal(false);
+    ConfigurePerGame dialog(this, title_id, file_name, system);
+    const auto result = dialog.exec();
+
+    if (result != QDialog::Accepted) {
+        Settings::RestoreGlobalState(system.IsPoweredOn());
+        return;
+    } else if (result == QDialog::Accepted) {
+        dialog.ApplyConfiguration();
+    }
+
+    // Do not cause the global config to write local settings into the config file
+    const bool is_powered_on = system.IsPoweredOn();
+    Settings::RestoreGlobalState(system.IsPoweredOn());
+
+    if (!is_powered_on) {
+        config->Save();
+    }
+}
+
 void GMainWindow::OnMoviePlaybackCompleted() {
     OnPauseGame();
     QMessageBox::information(this, tr("Playback Completed"), tr("Movie playback completed."));
@@ -2527,18 +2587,19 @@ void GMainWindow::UpdateUISettings() {
 }
 
 void GMainWindow::SyncMenuUISettings() {
-    ui->action_Screen_Layout_Default->setChecked(Settings::values.layout_option ==
+    ui->action_Screen_Layout_Default->setChecked(Settings::values.layout_option.GetValue() ==
                                                  Settings::LayoutOption::Default);
-    ui->action_Screen_Layout_Single_Screen->setChecked(Settings::values.layout_option ==
+    ui->action_Screen_Layout_Single_Screen->setChecked(Settings::values.layout_option.GetValue() ==
                                                        Settings::LayoutOption::SingleScreen);
-    ui->action_Screen_Layout_Large_Screen->setChecked(Settings::values.layout_option ==
+    ui->action_Screen_Layout_Large_Screen->setChecked(Settings::values.layout_option.GetValue() ==
                                                       Settings::LayoutOption::LargeScreen);
-    ui->action_Screen_Layout_Side_by_Side->setChecked(Settings::values.layout_option ==
+    ui->action_Screen_Layout_Side_by_Side->setChecked(Settings::values.layout_option.GetValue() ==
                                                       Settings::LayoutOption::SideScreen);
-    ui->action_Screen_Layout_Separate_Windows->setChecked(Settings::values.layout_option ==
-                                                          Settings::LayoutOption::SeparateWindows);
-    ui->action_Screen_Layout_Swap_Screens->setChecked(Settings::values.swap_screen);
-    ui->action_Screen_Layout_Upright_Screens->setChecked(Settings::values.upright_screen);
+    ui->action_Screen_Layout_Separate_Windows->setChecked(
+        Settings::values.layout_option.GetValue() == Settings::LayoutOption::SeparateWindows);
+    ui->action_Screen_Layout_Swap_Screens->setChecked(Settings::values.swap_screen.GetValue());
+    ui->action_Screen_Layout_Upright_Screens->setChecked(
+        Settings::values.upright_screen.GetValue());
 }
 
 void GMainWindow::RetranslateStatusBar() {
@@ -2603,11 +2664,13 @@ int main(int argc, char* argv[]) {
 
     // Register frontend applets
     Frontend::RegisterDefaultApplets();
-    Core::System::GetInstance().RegisterMiiSelector(std::make_shared<QtMiiSelector>(main_window));
-    Core::System::GetInstance().RegisterSoftwareKeyboard(std::make_shared<QtKeyboard>(main_window));
+
+    Core::System& system = Core::System::GetInstance();
+    system.RegisterMiiSelector(std::make_shared<QtMiiSelector>(main_window));
+    system.RegisterSoftwareKeyboard(std::make_shared<QtKeyboard>(main_window));
 
     // Register Qt image interface
-    Core::System::GetInstance().RegisterImageInterface(std::make_shared<QtImageInterface>());
+    system.RegisterImageInterface(std::make_shared<QtImageInterface>());
 
     main_window.show();
 

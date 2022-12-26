@@ -4,13 +4,13 @@
 
 #include "video_core/renderer_opengl/texture_filters/nearest_neighbor/nearest_neighbor.h"
 
-#include "shaders/nearest_neighbor.frag"
-#include "shaders/tex_coord.vert"
+#include "video_core/host_shaders/texture_filtering/nearest_neighbor_frag.h"
+#include "video_core/host_shaders/texture_filtering/tex_coord_vert.h"
 
 namespace OpenGL {
 
 NearestNeighbor::NearestNeighbor(u16 scale_factor) : TextureFilterBase(scale_factor) {
-    program.Create(tex_coord_vert.data(), nearest_neighbor_frag.data());
+    program.Create(HostShaders::TEX_COORD_VERT, HostShaders::NEAREST_NEIGHBOR_FRAG);
     vao.Create();
     src_sampler.Create();
 

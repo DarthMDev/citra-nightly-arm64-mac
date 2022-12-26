@@ -29,11 +29,11 @@ struct StagingBuffer {
 
 class StreamBuffer {
     static constexpr u32 MAX_BUFFER_VIEWS = 3;
-    static constexpr u32 BUCKET_COUNT = 8;
+    static constexpr u32 BUCKET_COUNT = 4;
+
 public:
     /// Staging only constructor
-    StreamBuffer(const Instance& instance, Scheduler& scheduler, u32 size,
-                 bool readback = false);
+    StreamBuffer(const Instance& instance, Scheduler& scheduler, u32 size, bool readback = false);
     /// Staging + GPU streaming constructor
     StreamBuffer(const Instance& instance, Scheduler& scheduler, u32 size,
                  vk::BufferUsageFlagBits usage, std::span<const vk::Format> views,
@@ -44,7 +44,7 @@ public:
     StreamBuffer& operator=(const StreamBuffer&) = delete;
 
     /// Maps aligned staging memory of size bytes
-    std::tuple<u8*, u32, bool> Map(u32 size, u32 alignment = 0);
+    std::tuple<u8*, u32, bool> Map(u32 size);
 
     /// Commits size bytes from the currently mapped staging memory
     void Commit(u32 size = 0);
@@ -72,6 +72,17 @@ public:
     }
 
 private:
+    /// Moves to the next bucket
+    void MoveNextBucket();
+
+    struct Bucket {
+        bool invalid = false;
+        u32 gpu_tick = 0;
+        u32 cursor = 0;
+        u32 flush_cursor = 0;
+    };
+
+private:
     const Instance& instance;
     Scheduler& scheduler;
     StagingBuffer staging;
@@ -79,14 +90,12 @@ private:
     VmaAllocation allocation{};
     vk::BufferUsageFlagBits usage;
     std::array<vk::BufferView, MAX_BUFFER_VIEWS> views{};
+    std::array<Bucket, BUCKET_COUNT> buckets;
     std::size_t view_count = 0;
     u32 total_size = 0;
     u32 bucket_size = 0;
-    u32 buffer_offset = 0;
-    u32 flush_offset = 0;
     u32 bucket_index = 0;
     bool readback = false;
-    std::array<u64, BUCKET_COUNT> ticks{};
 };
 
 } // namespace Vulkan

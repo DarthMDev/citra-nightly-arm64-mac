@@ -4,8 +4,8 @@
 
 #include <span>
 #include "common/assert.h"
+#include "common/settings.h"
 #include "core/frontend/emu_window.h"
-#include "core/settings.h"
 #include "video_core/renderer_vulkan/vk_instance.h"
 #include "video_core/renderer_vulkan/vk_platform.h"
 
@@ -15,26 +15,9 @@ namespace Vulkan {
 
 vk::DynamicLoader Instance::dl;
 
-inline std::string_view GetType(vk::DebugUtilsMessageTypeFlagBitsEXT type) {
-    switch (type) {
-    case vk::DebugUtilsMessageTypeFlagBitsEXT::eGeneral:
-        return "General";
-    case vk::DebugUtilsMessageTypeFlagBitsEXT::eValidation:
-        return "Validation";
-    case vk::DebugUtilsMessageTypeFlagBitsEXT::ePerformance:
-        return "Performance";
-    case vk::DebugUtilsMessageTypeFlagBitsEXT::eDeviceAddressBinding:
-        return "DeviceAddressBinding";
-    default:
-        return "";
-    };
-}
-
-static VKAPI_ATTR VkBool32 VKAPI_CALL DebugHandler(
-    VkDebugUtilsMessageSeverityFlagBitsEXT severity,
-    VkDebugUtilsMessageTypeFlagsEXT type,
-    const VkDebugUtilsMessengerCallbackDataEXT* callback_data,
-    void* user_data) {
+static VKAPI_ATTR VkBool32 VKAPI_CALL
+DebugHandler(VkDebugUtilsMessageSeverityFlagBitsEXT severity, VkDebugUtilsMessageTypeFlagsEXT type,
+             const VkDebugUtilsMessengerCallbackDataEXT* callback_data, void* user_data) {
 
     switch (callback_data->messageIdNumber) {
     case 0x609a13b: // Vertex attribute at location not consumed by shader
@@ -59,8 +42,8 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL DebugHandler(
         level = Log::Level::Info;
     }
 
-    LOG_GENERIC(Log::Class::Render_Vulkan, level, "{}: {}",
-                callback_data->pMessageIdName, callback_data->pMessage);
+    LOG_GENERIC(Log::Class::Render_Vulkan, level, "{}: {}", callback_data->pMessageIdName,
+                callback_data->pMessage);
 
     return VK_FALSE;
 }
@@ -93,17 +76,15 @@ vk::Format ToVkFormat(VideoCore::PixelFormat format) {
 }
 
 [[nodiscard]] vk::DebugUtilsMessengerCreateInfoEXT MakeDebugUtilsMessengerInfo() {
-    return {
-        .messageSeverity = vk::DebugUtilsMessageSeverityFlagBitsEXT::eInfo |
-                            vk::DebugUtilsMessageSeverityFlagBitsEXT::eError |
-                            vk::DebugUtilsMessageSeverityFlagBitsEXT::eWarning |
-                            vk::DebugUtilsMessageSeverityFlagBitsEXT::eVerbose,
-        .messageType = vk::DebugUtilsMessageTypeFlagBitsEXT::eGeneral |
-                        vk::DebugUtilsMessageTypeFlagBitsEXT::eValidation |
-                        vk::DebugUtilsMessageTypeFlagBitsEXT::eDeviceAddressBinding |
-                        vk::DebugUtilsMessageTypeFlagBitsEXT::ePerformance,
-        .pfnUserCallback = DebugHandler
-    };
+    return {.messageSeverity = vk::DebugUtilsMessageSeverityFlagBitsEXT::eInfo |
+                               vk::DebugUtilsMessageSeverityFlagBitsEXT::eError |
+                               vk::DebugUtilsMessageSeverityFlagBitsEXT::eWarning |
+                               vk::DebugUtilsMessageSeverityFlagBitsEXT::eVerbose,
+            .messageType = vk::DebugUtilsMessageTypeFlagBitsEXT::eGeneral |
+                           vk::DebugUtilsMessageTypeFlagBitsEXT::eValidation |
+                           vk::DebugUtilsMessageTypeFlagBitsEXT::eDeviceAddressBinding |
+                           vk::DebugUtilsMessageTypeFlagBitsEXT::ePerformance,
+            .pfnUserCallback = DebugHandler};
 }
 
 std::vector<std::string> GetSupportedExtensions(vk::PhysicalDevice physical) {
@@ -116,9 +97,8 @@ std::vector<std::string> GetSupportedExtensions(vk::PhysicalDevice physical) {
     return supported_extensions;
 }
 
-Instance::Instance(bool validation, bool dump_command_buffers) :
-    enable_validation{validation},
-    dump_command_buffers{dump_command_buffers}{
+Instance::Instance(bool validation, bool dump_command_buffers)
+    : enable_validation{validation}, dump_command_buffers{dump_command_buffers} {
     // Fetch instance independant function pointers
     auto vkGetInstanceProcAddr =
         dl.getProcAddress<PFN_vkGetInstanceProcAddr>("vkGetInstanceProcAddr");
@@ -136,8 +116,13 @@ Instance::Instance(bool validation, bool dump_command_buffers) :
                                                   .engineVersion = VK_MAKE_VERSION(1, 0, 0),
                                                   .apiVersion = VK_API_VERSION_1_0};
 
+    std::array<const char*, 3> layers;
+#ifdef ANDROID
+    u32 layer_count = 1;
+    layers[0] = "VK_LAYER_KHRONOS_timeline_semaphore";
+#else
     u32 layer_count = 0;
-    std::array<const char*, 2> layers;
+#endif
 
     if (enable_validation) {
         layers[layer_count++] = "VK_LAYER_KHRONOS_validation";
@@ -147,17 +132,13 @@ Instance::Instance(bool validation, bool dump_command_buffers) :
     }
 
     const vk::StructureChain instance_chain = {
-        vk::InstanceCreateInfo{
-            .flags = flags,
-            .pApplicationInfo = &application_info,
-            .enabledLayerCount = layer_count,
-            .ppEnabledLayerNames = layers.data(),
-            .enabledExtensionCount =
-                static_cast<u32>(extensions.size()),
-            .ppEnabledExtensionNames = extensions.data()
-        },
-        MakeDebugUtilsMessengerInfo()
-    };
+        vk::InstanceCreateInfo{.flags = flags,
+                               .pApplicationInfo = &application_info,
+                               .enabledLayerCount = layer_count,
+                               .ppEnabledLayerNames = layers.data(),
+                               .enabledExtensionCount = static_cast<u32>(extensions.size()),
+                               .ppEnabledExtensionNames = extensions.data()},
+        MakeDebugUtilsMessengerInfo()};
 
     instance = vk::createInstance(instance_chain.get());
 
@@ -172,9 +153,9 @@ Instance::Instance(bool validation, bool dump_command_buffers) :
     physical_devices = instance.enumeratePhysicalDevices();
 }
 
-Instance::Instance(Frontend::EmuWindow& window, u32 physical_device_index) :
-    enable_validation{Settings::values.renderer_debug},
-    dump_command_buffers{Settings::values.dump_command_buffers} {
+Instance::Instance(Frontend::EmuWindow& window, u32 physical_device_index)
+    : enable_validation{Settings::values.renderer_debug},
+      dump_command_buffers{Settings::values.dump_command_buffers} {
     auto window_info = window.GetWindowInfo();
 
     // Fetch instance independant function pointers
@@ -183,7 +164,7 @@ Instance::Instance(Frontend::EmuWindow& window, u32 physical_device_index) :
     VULKAN_HPP_DEFAULT_DISPATCHER.init(vkGetInstanceProcAddr);
 
     // Enable the instance extensions the backend uses
-    auto extensions = GetInstanceExtensions(window_info.type, true);
+    auto extensions = GetInstanceExtensions(window_info.type, enable_validation);
 
     // Use required platform-specific flags
     auto flags = GetInstanceFlags();
@@ -212,22 +193,19 @@ Instance::Instance(Frontend::EmuWindow& window, u32 physical_device_index) :
     }
 
     const vk::StructureChain instance_chain = {
-        vk::InstanceCreateInfo{
-            .flags = flags,
-            .pApplicationInfo = &application_info,
-            .enabledLayerCount = layer_count,
-            .ppEnabledLayerNames = layers.data(),
-            .enabledExtensionCount =
-                static_cast<u32>(extensions.size()),
-            .ppEnabledExtensionNames = extensions.data()
-        },
-        MakeDebugUtilsMessengerInfo()
-    };
+        vk::InstanceCreateInfo{.flags = flags,
+                               .pApplicationInfo = &application_info,
+                               .enabledLayerCount = layer_count,
+                               .ppEnabledLayerNames = layers.data(),
+                               .enabledExtensionCount = static_cast<u32>(extensions.size()),
+                               .ppEnabledExtensionNames = extensions.data()},
+        MakeDebugUtilsMessengerInfo()};
 
     try {
         instance = vk::createInstance(instance_chain.get());
     } catch (vk::LayerNotPresentError& err) {
-        LOG_CRITICAL(Render_Vulkan, "Validation requested but layer is not available {}", err.what());
+        LOG_CRITICAL(Render_Vulkan, "Validation requested but layer is not available {}",
+                     err.what());
         UNREACHABLE();
     }
 
@@ -235,7 +213,7 @@ Instance::Instance(Frontend::EmuWindow& window, u32 physical_device_index) :
 
     // Calling this after CreateSurface to ensure the function has been loaded
     if (enable_validation) {
-        CreateDebugMessenger();
+        debug_messenger = instance.createDebugUtilsMessengerEXT(MakeDebugUtilsMessengerInfo());
     }
 
     // Pick physical device
@@ -256,6 +234,7 @@ Instance::Instance(Frontend::EmuWindow& window, u32 physical_device_index) :
 
     CreateDevice();
     CreateFormatTable();
+    CollectTelemetryParameters();
 }
 
 Instance::~Instance() {
@@ -264,7 +243,7 @@ Instance::~Instance() {
         device.destroy();
         instance.destroySurfaceKHR(surface);
 
-        if (enable_validation) {
+        if (debug_messenger) {
             instance.destroyDebugUtilsMessengerEXT(debug_messenger);
         }
     }
@@ -383,9 +362,8 @@ bool Instance::CreateDevice() {
     u32 enabled_extension_count = 0;
 
     auto AddExtension = [&](std::string_view extension) -> bool {
-        auto result =
-            std::find_if(available_extensions.begin(), available_extensions.end(),
-                         [&](const std::string& name) { return name == extension; });
+        auto result = std::find_if(available_extensions.begin(), available_extensions.end(),
+                                   [&](const std::string& name) { return name == extension; });
 
         if (result != available_extensions.end()) {
             LOG_INFO(Render_Vulkan, "Enabling extension: {}", extension);
@@ -509,28 +487,12 @@ void Instance::CreateAllocator() {
     }
 }
 
-void Instance::CreateDebugMessenger() {
-    const vk::DebugUtilsMessengerCreateInfoEXT debug_info = {
-        .messageSeverity = vk::DebugUtilsMessageSeverityFlagBitsEXT::eInfo |
-                            vk::DebugUtilsMessageSeverityFlagBitsEXT::eError |
-                            vk::DebugUtilsMessageSeverityFlagBitsEXT::eWarning |
-                            vk::DebugUtilsMessageSeverityFlagBitsEXT::eVerbose,
-        .messageType = vk::DebugUtilsMessageTypeFlagBitsEXT::eGeneral |
-                        vk::DebugUtilsMessageTypeFlagBitsEXT::eValidation |
-                        vk::DebugUtilsMessageTypeFlagBitsEXT::eDeviceAddressBinding |
-                        vk::DebugUtilsMessageTypeFlagBitsEXT::ePerformance,
-        .pfnUserCallback = DebugHandler
-    };
-
-    debug_messenger = instance.createDebugUtilsMessengerEXT(debug_info);
-}
-
 void Instance::CollectTelemetryParameters() {
     const vk::StructureChain property_chain =
-            physical_device.getProperties2<vk::PhysicalDeviceProperties2,
-                                           vk::PhysicalDeviceDriverProperties>();
+        physical_device
+            .getProperties2<vk::PhysicalDeviceProperties2, vk::PhysicalDeviceDriverProperties>();
     const vk::PhysicalDeviceDriverProperties driver =
-            property_chain.get<vk::PhysicalDeviceDriverProperties>();
+        property_chain.get<vk::PhysicalDeviceDriverProperties>();
 
     driver_id = driver.driverID;
     vendor_name = driver.driverName.data();

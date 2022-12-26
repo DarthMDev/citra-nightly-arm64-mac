@@ -173,17 +173,8 @@ private:
     /// Creates the VMA allocator handle
     void CreateAllocator();
 
-    /// Creates the debug messenger
-    void CreateDebugMessenger();
-
     /// Collects telemetry information from the device.
     void CollectTelemetryParameters();
-
-    /// Collects information about attached tools.
-    void CollectToolingInfo();
-
-    /// Collects information about the device's local memory.
-    void CollectPhysicalMemoryInfo();
 
 private:
     static vk::DynamicLoader dl;

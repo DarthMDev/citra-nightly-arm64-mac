@@ -7,11 +7,11 @@
 #include <thread>
 #include <unordered_map>
 #include <boost/variant.hpp>
+#include "video_core/renderer_opengl/gl_driver.h"
 #include "video_core/renderer_opengl/gl_resource_manager.h"
 #include "video_core/renderer_opengl/gl_shader_disk_cache.h"
 #include "video_core/renderer_opengl/gl_shader_manager.h"
 #include "video_core/renderer_opengl/gl_state.h"
-#include "video_core/renderer_opengl/gl_driver.h"
 #include "video_core/video_core.h"
 
 namespace OpenGL {
@@ -374,7 +374,8 @@ public:
     ShaderDiskCache disk_cache;
 };
 
-ShaderProgramManager::ShaderProgramManager(Frontend::EmuWindow& emu_window_, Driver& driver, bool separable)
+ShaderProgramManager::ShaderProgramManager(Frontend::EmuWindow& emu_window_, Driver& driver,
+                                           bool separable)
     : impl(std::make_unique<Impl>(separable)), emu_window{emu_window_}, driver{driver} {}
 
 ShaderProgramManager::~ShaderProgramManager() = default;

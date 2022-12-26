@@ -5,11 +5,11 @@
 #include <algorithm>
 #include "common/alignment.h"
 #include "common/assert.h"
-#include "common/microprofile.h"
 #include "common/logging/log.h"
+#include "common/microprofile.h"
 #include "video_core/renderer_vulkan/vk_instance.h"
-#include "video_core/renderer_vulkan/vk_stream_buffer.h"
 #include "video_core/renderer_vulkan/vk_scheduler.h"
+#include "video_core/renderer_vulkan/vk_stream_buffer.h"
 
 #include <vk_mem_alloc.h>
 
@@ -80,16 +80,15 @@ StagingBuffer::~StagingBuffer() {
     vmaDestroyBuffer(instance.GetAllocator(), static_cast<VkBuffer>(buffer), allocation);
 }
 
-StreamBuffer::StreamBuffer(const Instance& instance, Scheduler& scheduler, u32 size,
-                           bool readback)
-    : instance{instance}, scheduler{scheduler}, staging{instance, size, readback},
-      total_size{size}, bucket_size{size / BUCKET_COUNT}, readback{readback} {}
+StreamBuffer::StreamBuffer(const Instance& instance, Scheduler& scheduler, u32 size, bool readback)
+    : instance{instance}, scheduler{scheduler}, staging{instance, size, readback}, total_size{size},
+      bucket_size{size / BUCKET_COUNT}, readback{readback} {}
 
 StreamBuffer::StreamBuffer(const Instance& instance, Scheduler& scheduler, u32 size,
                            vk::BufferUsageFlagBits usage, std::span<const vk::Format> view_formats,
                            bool readback)
-    : instance{instance}, scheduler{scheduler}, staging{instance, size, readback},
-      usage{usage}, total_size{size}, bucket_size{size / BUCKET_COUNT}, readback{readback} {
+    : instance{instance}, scheduler{scheduler}, staging{instance, size, readback}, usage{usage},
+      total_size{size}, bucket_size{size / BUCKET_COUNT}, readback{readback} {
     const vk::BufferCreateInfo buffer_info = {
         .size = total_size, .usage = usage | vk::BufferUsageFlagBits::eTransferDst};
 
@@ -129,56 +128,52 @@ StreamBuffer::~StreamBuffer() {
     }
 }
 
-std::tuple<u8*, u32, bool> StreamBuffer::Map(u32 size, u32 alignment) {
-    ASSERT(size <= total_size && alignment <= total_size);
+std::tuple<u8*, u32, bool> StreamBuffer::Map(u32 size) {
+    ASSERT(size <= total_size);
+    size = Common::AlignUp(size, 16);
 
-    if (alignment > 0) {
-        buffer_offset = Common::AlignUp(buffer_offset, alignment);
+    Bucket& bucket = buckets[bucket_index];
+
+    // If we reach bucket boundaries move over to the next one
+    if (bucket.cursor + size > bucket_size) {
+        bucket.gpu_tick = scheduler.CurrentTick();
+        MoveNextBucket();
+        return Map(size);
     }
 
-    bool invalidate = false;
-    const u32 new_offset = buffer_offset + size;
-    if (u32 new_index = new_offset / bucket_size; new_index != bucket_index) {
-        if (new_index >= BUCKET_COUNT) {
-            if (readback) {
-                Invalidate();
-            } else {
-                Flush();
-            }
-            buffer_offset = 0;
-            flush_offset = 0;
-            new_index = 0;
-            invalidate = true;
-        }
-        ticks[bucket_index] = scheduler.CurrentTick();
-        scheduler.Wait(ticks[new_index]);
-        bucket_index = new_index;
-    }
-
+    const bool invalidate = std::exchange(bucket.invalid, false);
+    const u32 buffer_offset = bucket_index * bucket_size + bucket.cursor;
     u8* mapped = reinterpret_cast<u8*>(staging.mapped.data() + buffer_offset);
+
     return std::make_tuple(mapped, buffer_offset, invalidate);
 }
 
 void StreamBuffer::Commit(u32 size) {
-    buffer_offset += size;
+    size = Common::AlignUp(size, 16);
+    buckets[bucket_index].cursor += size;
 }
 
 void StreamBuffer::Flush() {
     if (readback) {
+        LOG_WARNING(Render_Vulkan, "Cannot flush read only buffer");
         return;
     }
 
-    const u32 flush_size = buffer_offset - flush_offset;
-    ASSERT(flush_size <= total_size);
-    ASSERT(flush_offset + flush_size <= total_size);
+    Bucket& bucket = buckets[bucket_index];
+    const u32 flush_start = bucket_index * bucket_size + bucket.flush_cursor;
+    const u32 flush_size = bucket.cursor - bucket.flush_cursor;
+    ASSERT(flush_size <= bucket_size);
+    ASSERT(flush_start + flush_size <= total_size);
 
     if (flush_size > 0) [[likely]] {
+        // Ensure all staging writes are visible to the host memory domain
         VmaAllocator allocator = instance.GetAllocator();
-        vmaFlushAllocation(allocator, staging.allocation, flush_offset, flush_size);
+        vmaFlushAllocation(allocator, staging.allocation, flush_start, flush_size);
         if (gpu_buffer) {
-            scheduler.Record([this, flush_offset = flush_offset, flush_size](vk::CommandBuffer, vk::CommandBuffer upload_cmdbuf) {
+            scheduler.Record([this, flush_start, flush_size](vk::CommandBuffer,
+                                                             vk::CommandBuffer upload_cmdbuf) {
                 const vk::BufferCopy copy_region = {
-                    .srcOffset = flush_offset, .dstOffset = flush_offset, .size = flush_size};
+                    .srcOffset = flush_start, .dstOffset = flush_start, .size = flush_size};
 
                 upload_cmdbuf.copyBuffer(staging.buffer, gpu_buffer, copy_region);
 
@@ -188,16 +183,15 @@ void StreamBuffer::Flush() {
                     .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
                     .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
                     .buffer = gpu_buffer,
-                    .offset = flush_offset,
+                    .offset = flush_start,
                     .size = flush_size};
 
-                upload_cmdbuf.pipelineBarrier(vk::PipelineStageFlagBits::eTransfer,
-                                              MakePipelineStage(usage),
-                                              vk::DependencyFlagBits::eByRegion, {}, buffer_barrier,
-                                              {});
+                upload_cmdbuf.pipelineBarrier(
+                    vk::PipelineStageFlagBits::eTransfer, MakePipelineStage(usage),
+                    vk::DependencyFlagBits::eByRegion, {}, buffer_barrier, {});
             });
         }
-        flush_offset = buffer_offset;
+        bucket.flush_cursor += flush_size;
     }
 }
 
@@ -206,15 +200,33 @@ void StreamBuffer::Invalidate() {
         return;
     }
 
-    const u32 flush_size = buffer_offset - flush_offset;
-    ASSERT(flush_size <= total_size);
-    ASSERT(flush_offset + flush_size <= total_size);
+    Bucket& bucket = buckets[bucket_index];
+    const u32 flush_start = bucket_index * bucket_size + bucket.flush_cursor;
+    const u32 flush_size = bucket.cursor - bucket.flush_cursor;
+    ASSERT(flush_size <= bucket_size);
 
     if (flush_size > 0) [[likely]] {
+        // Ensure the staging memory can be read by the host
         VmaAllocator allocator = instance.GetAllocator();
-        vmaInvalidateAllocation(allocator, staging.allocation, flush_offset, flush_size);
-        flush_offset = buffer_offset;
+        vmaInvalidateAllocation(allocator, staging.allocation, flush_start, flush_size);
+        bucket.flush_cursor += flush_size;
     }
+}
+
+void StreamBuffer::MoveNextBucket() {
+    // Flush and Invalidate are bucket local operations for simplicity so perform them here
+    if (readback) {
+        Invalidate();
+    } else {
+        Flush();
+    }
+
+    bucket_index = (bucket_index + 1) % BUCKET_COUNT;
+    Bucket& next_bucket = buckets[bucket_index];
+    scheduler.Wait(next_bucket.gpu_tick);
+    next_bucket.cursor = 0;
+    next_bucket.flush_cursor = 0;
+    next_bucket.invalid = true;
 }
 
 } // namespace Vulkan

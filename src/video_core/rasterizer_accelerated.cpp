@@ -4,8 +4,8 @@
 
 #include <limits>
 #include "core/memory.h"
-#include "video_core/rasterizer_accelerated.h"
 #include "video_core/pica_state.h"
+#include "video_core/rasterizer_accelerated.h"
 #include "video_core/video_core.h"
 
 namespace VideoCore {
@@ -711,16 +711,15 @@ void RasterizerAccelerated::SyncAlphaTest() {
 }
 
 void RasterizerAccelerated::SyncCombinerColor() {
-    auto combiner_color =
-        ColorRGBA8(Pica::g_state.regs.texturing.tev_combiner_buffer_color.raw);
+    auto combiner_color = ColorRGBA8(Pica::g_state.regs.texturing.tev_combiner_buffer_color.raw);
     if (combiner_color != uniform_block_data.data.tev_combiner_buffer_color) {
         uniform_block_data.data.tev_combiner_buffer_color = combiner_color;
         uniform_block_data.dirty = true;
     }
 }
 
-void RasterizerAccelerated::SyncTevConstColor(std::size_t stage_index,
-                                         const Pica::TexturingRegs::TevStageConfig& tev_stage) {
+void RasterizerAccelerated::SyncTevConstColor(
+    std::size_t stage_index, const Pica::TexturingRegs::TevStageConfig& tev_stage) {
     const auto const_color = ColorRGBA8(tev_stage.const_color);
 
     if (const_color == uniform_block_data.data.const_color[stage_index]) {
@@ -785,7 +784,8 @@ void RasterizerAccelerated::SyncLightPosition(int light_index) {
 
 void RasterizerAccelerated::SyncLightSpotDirection(int light_index) {
     const auto& light = Pica::g_state.regs.lighting.light[light_index];
-    const auto spot_direction = Common::Vec3f{light.spot_x / 2047.0f, light.spot_y / 2047.0f, light.spot_z / 2047.0f};
+    const auto spot_direction =
+        Common::Vec3f{light.spot_x / 2047.0f, light.spot_y / 2047.0f, light.spot_z / 2047.0f};
 
     if (spot_direction != uniform_block_data.data.light_src[light_index].spot_direction) {
         uniform_block_data.data.light_src[light_index].spot_direction = spot_direction;

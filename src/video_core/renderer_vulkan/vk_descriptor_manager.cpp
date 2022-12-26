@@ -58,7 +58,8 @@ constexpr vk::ShaderStageFlags ToVkStageFlags(vk::DescriptorType type) {
 }
 
 DescriptorManager::DescriptorManager(const Instance& instance, Scheduler& scheduler)
-    : instance{instance}, scheduler{scheduler}, pool_provider{instance, scheduler.GetMasterSemaphore()} {
+    : instance{instance}, scheduler{scheduler}, pool_provider{instance,
+                                                              scheduler.GetMasterSemaphore()} {
     BuildLayouts();
     descriptor_set_dirty.fill(true);
     current_pool = pool_provider.Commit();
@@ -101,7 +102,8 @@ void DescriptorManager::BindDescriptorSets() {
     }
 
     scheduler.Record([this, bound_sets](vk::CommandBuffer render_cmdbuf, vk::CommandBuffer) {
-        render_cmdbuf.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipeline_layout, 0, bound_sets, {});
+        render_cmdbuf.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipeline_layout, 0,
+                                         bound_sets, {});
     });
 
     descriptor_set_dirty.fill(false);
@@ -158,9 +160,7 @@ vk::DescriptorSet DescriptorManager::AllocateSet(vk::DescriptorSetLayout layout)
     vk::Device device = instance.GetDevice();
 
     const vk::DescriptorSetAllocateInfo alloc_info = {
-        .descriptorPool = current_pool,
-        .descriptorSetCount = 1,
-        .pSetLayouts = &layout};
+        .descriptorPool = current_pool, .descriptorSetCount = 1, .pSetLayouts = &layout};
 
     try {
         return device.allocateDescriptorSets(alloc_info)[0];

@@ -9,8 +9,8 @@
 #include "common/hash.h"
 #include "video_core/rasterizer_cache/pixel_format.h"
 #include "video_core/regs.h"
-#include "video_core/renderer_vulkan/vk_shader_util.h"
 #include "video_core/renderer_vulkan/vk_shader_gen_spv.h"
+#include "video_core/renderer_vulkan/vk_shader_util.h"
 #include "video_core/shader/shader_cache.h"
 
 namespace Vulkan {
@@ -100,8 +100,8 @@ struct PipelineInfo {
         const bool has_stencil = depth_attachment == VideoCore::PixelFormat::D24S8;
         const bool depth_write =
             depth_stencil.depth_test_enable && depth_stencil.depth_write_enable;
-        const bool stencil_write = has_stencil && depth_stencil.stencil_test_enable &&
-                                   dynamic.stencil_write_mask != 0;
+        const bool stencil_write =
+            has_stencil && depth_stencil.stencil_test_enable && dynamic.stencil_write_mask != 0;
 
         return depth_write || stencil_write;
     }
@@ -119,8 +119,8 @@ using FixedGeometryShaders = Pica::Shader::ShaderCache<PicaFixedGSConfig, vk::Sh
 using FragmentShadersGLSL =
     Pica::Shader::ShaderCache<PicaFSConfig, vk::ShaderModule, &Compile, &GenerateFragmentShader>;
 
-using FragmentShadersSPV =
-    Pica::Shader::ShaderCache<PicaFSConfig, vk::ShaderModule, &CompileSPV, &GenerateFragmentShaderSPV>;
+using FragmentShadersSPV = Pica::Shader::ShaderCache<PicaFSConfig, vk::ShaderModule, &CompileSPV,
+                                                     &GenerateFragmentShaderSPV>;
 
 class Instance;
 class Scheduler;
@@ -132,8 +132,8 @@ class DescriptorManager;
  */
 class PipelineCache {
 public:
-    PipelineCache(const Instance& instance, Scheduler& scheduler,
-                  RenderpassCache& renderpass_cache, DescriptorManager& desc_manager);
+    PipelineCache(const Instance& instance, Scheduler& scheduler, RenderpassCache& renderpass_cache,
+                  DescriptorManager& desc_manager);
     ~PipelineCache();
 
     /// Loads the pipeline cache stored to disk

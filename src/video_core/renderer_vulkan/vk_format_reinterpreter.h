@@ -37,8 +37,8 @@ using ReinterpreterList = std::vector<std::unique_ptr<FormatReinterpreterBase>>;
 
 class D24S8toRGBA8 final : public FormatReinterpreterBase {
 public:
-    D24S8toRGBA8(const Instance& instance, Scheduler& scheduler,
-                 DescriptorManager& desc_manager, TextureRuntime& runtime);
+    D24S8toRGBA8(const Instance& instance, Scheduler& scheduler, DescriptorManager& desc_manager,
+                 TextureRuntime& runtime);
     ~D24S8toRGBA8();
 
     [[nodiscard]] VideoCore::PixelFormat GetSourceFormat() const override {

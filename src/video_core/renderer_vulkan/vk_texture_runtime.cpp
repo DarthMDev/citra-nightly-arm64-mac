@@ -65,9 +65,11 @@ constexpr u32 DOWNLOAD_BUFFER_SIZE = 32 * 1024 * 1024;
 
 TextureRuntime::TextureRuntime(const Instance& instance, Scheduler& scheduler,
                                RenderpassCache& renderpass_cache, DescriptorManager& desc_manager)
-    : instance{instance}, scheduler{scheduler}, renderpass_cache{renderpass_cache}, desc_manager{desc_manager},
-      blit_helper{instance, scheduler, desc_manager}, upload_buffer{instance, scheduler, UPLOAD_BUFFER_SIZE},
-      download_buffer{instance, scheduler, DOWNLOAD_BUFFER_SIZE, true} {
+    : instance{instance}, scheduler{scheduler}, renderpass_cache{renderpass_cache},
+      desc_manager{desc_manager}, blit_helper{instance, scheduler, desc_manager},
+      upload_buffer{instance, scheduler, UPLOAD_BUFFER_SIZE}, download_buffer{instance, scheduler,
+                                                                              DOWNLOAD_BUFFER_SIZE,
+                                                                              true} {
 
     auto Register = [this](VideoCore::PixelFormat dest,
                            std::unique_ptr<FormatReinterpreterBase>&& obj) {
@@ -109,7 +111,7 @@ TextureRuntime::~TextureRuntime() {
 StagingData TextureRuntime::FindStaging(u32 size, bool upload) {
     // Depth uploads require 4 byte alignment, doesn't hurt to do it for everyone
     auto& buffer = upload ? upload_buffer : download_buffer;
-    auto [data, offset, invalidate] = buffer.Map(size, 4);
+    auto [data, offset, invalidate] = buffer.Map(size);
 
     return StagingData{.buffer = buffer.GetStagingHandle(),
                        .size = size,
@@ -331,8 +333,8 @@ bool TextureRuntime::ClearTexture(Surface& surface, const VideoCore::TextureClea
     }
 
     if (clear.texture_rect == surface.GetScaledRect()) {
-        scheduler.Record(
-            [aspect, image = surface.alloc.image, clear_value, clear](vk::CommandBuffer render_cmdbuf, vk::CommandBuffer) {
+        scheduler.Record([aspect, image = surface.alloc.image, clear_value,
+                          clear](vk::CommandBuffer render_cmdbuf, vk::CommandBuffer) {
             const vk::ImageSubresourceRange range = {.aspectMask = aspect,
                                                      .baseMipLevel = clear.texture_level,
                                                      .levelCount = 1,
@@ -340,8 +342,8 @@ bool TextureRuntime::ClearTexture(Surface& surface, const VideoCore::TextureClea
                                                      .layerCount = 1};
 
             if (aspect & vk::ImageAspectFlagBits::eColor) {
-                render_cmdbuf.clearColorImage(image, vk::ImageLayout::eTransferDstOptimal, clear_value.color,
-                                               range);
+                render_cmdbuf.clearColorImage(image, vk::ImageLayout::eTransferDstOptimal,
+                                              clear_value.color, range);
             } else if (aspect & vk::ImageAspectFlagBits::eDepth ||
                        aspect & vk::ImageAspectFlagBits::eStencil) {
                 render_cmdbuf.clearDepthStencilImage(image, vk::ImageLayout::eTransferDstOptimal,
@@ -355,8 +357,8 @@ bool TextureRuntime::ClearTexture(Surface& surface, const VideoCore::TextureClea
                 surface.pixel_format, VideoCore::PixelFormat::Invalid, true);
             surface.Transition(vk::ImageLayout::eColorAttachmentOptimal, 0, 1);
         } else if (aspect & vk::ImageAspectFlagBits::eDepth) {
-            clear_renderpass = renderpass_cache.GetRenderpass(
-                VideoCore::PixelFormat::Invalid, surface.pixel_format, true);
+            clear_renderpass = renderpass_cache.GetRenderpass(VideoCore::PixelFormat::Invalid,
+                                                              surface.pixel_format, true);
             surface.Transition(vk::ImageLayout::eDepthStencilAttachmentOptimal, 0, 1);
         }
 
@@ -383,8 +385,7 @@ bool TextureRuntime::ClearTexture(Surface& surface, const VideoCore::TextureClea
                                                  static_cast<s32>(clear.texture_rect.bottom)},
                                       .extent = {clear.texture_rect.GetWidth(),
                                                  clear.texture_rect.GetHeight()}},
-            .clear = clear_value
-        };
+            .clear = clear_value};
 
         renderpass_cache.EnterRenderpass(clear_info);
         renderpass_cache.ExitRenderpass();
@@ -401,22 +402,24 @@ bool TextureRuntime::CopyTextures(Surface& source, Surface& dest,
     dest.Transition(vk::ImageLayout::eTransferDstOptimal, copy.dst_level, 1);
 
     scheduler.Record([src_image = source.alloc.image, src_type = source.type,
-                     dst_image = dest.alloc.image, dst_type = dest.type, copy](vk::CommandBuffer render_cmdbuf, vk::CommandBuffer) {
-        const vk::ImageCopy image_copy = {
-            .srcSubresource = {.aspectMask = ToVkAspect(src_type),
-                               .mipLevel = copy.src_level,
-                               .baseArrayLayer = 0,
-                               .layerCount = 1},
-            .srcOffset = {static_cast<s32>(copy.src_offset.x), static_cast<s32>(copy.src_offset.y), 0},
-            .dstSubresource = {.aspectMask = ToVkAspect(dst_type),
-                               .mipLevel = copy.dst_level,
-                               .baseArrayLayer = 0,
-                               .layerCount = 1},
-            .dstOffset = {static_cast<s32>(copy.dst_offset.x), static_cast<s32>(copy.dst_offset.y), 0},
-            .extent = {copy.extent.width, copy.extent.height, 1}};
+                      dst_image = dest.alloc.image, dst_type = dest.type,
+                      copy](vk::CommandBuffer render_cmdbuf, vk::CommandBuffer) {
+        const vk::ImageCopy image_copy = {.srcSubresource = {.aspectMask = ToVkAspect(src_type),
+                                                             .mipLevel = copy.src_level,
+                                                             .baseArrayLayer = 0,
+                                                             .layerCount = 1},
+                                          .srcOffset = {static_cast<s32>(copy.src_offset.x),
+                                                        static_cast<s32>(copy.src_offset.y), 0},
+                                          .dstSubresource = {.aspectMask = ToVkAspect(dst_type),
+                                                             .mipLevel = copy.dst_level,
+                                                             .baseArrayLayer = 0,
+                                                             .layerCount = 1},
+                                          .dstOffset = {static_cast<s32>(copy.dst_offset.x),
+                                                        static_cast<s32>(copy.dst_offset.y), 0},
+                                          .extent = {copy.extent.width, copy.extent.height, 1}};
 
-        render_cmdbuf.copyImage(src_image, vk::ImageLayout::eTransferSrcOptimal,
-                                 dst_image, vk::ImageLayout::eTransferDstOptimal, image_copy);
+        render_cmdbuf.copyImage(src_image, vk::ImageLayout::eTransferSrcOptimal, dst_image,
+                                vk::ImageLayout::eTransferDstOptimal, image_copy);
     });
 
     return true;
@@ -430,8 +433,9 @@ bool TextureRuntime::BlitTextures(Surface& source, Surface& dest,
     dest.Transition(vk::ImageLayout::eTransferDstOptimal, blit.dst_level, 1);
 
     scheduler.Record([src_iamge = source.alloc.image, src_type = source.type,
-                     dst_image = dest.alloc.image, dst_type = dest.type,
-                     format = source.pixel_format, blit](vk::CommandBuffer render_cmdbuf, vk::CommandBuffer) {
+                      dst_image = dest.alloc.image, dst_type = dest.type,
+                      format = source.pixel_format,
+                      blit](vk::CommandBuffer render_cmdbuf, vk::CommandBuffer) {
         const std::array source_offsets = {vk::Offset3D{static_cast<s32>(blit.src_rect.left),
                                                         static_cast<s32>(blit.src_rect.bottom), 0},
                                            vk::Offset3D{static_cast<s32>(blit.src_rect.right),
@@ -460,9 +464,8 @@ bool TextureRuntime::BlitTextures(Surface& source, Surface& dest,
                                          ? vk::Filter::eNearest
                                          : vk::Filter::eLinear;
 
-        render_cmdbuf.blitImage(src_iamge, vk::ImageLayout::eTransferSrcOptimal,
-                                 dst_image, vk::ImageLayout::eTransferDstOptimal, blit_area,
-                                 filtering);
+        render_cmdbuf.blitImage(src_iamge, vk::ImageLayout::eTransferSrcOptimal, dst_image,
+                                vk::ImageLayout::eTransferDstOptimal, blit_area, filtering);
     });
 
     return true;
@@ -519,7 +522,8 @@ bool TextureRuntime::NeedsConvertion(VideoCore::PixelFormat format) const {
             !traits.attachment_support);
 }
 
-void TextureRuntime::Transition(ImageAlloc& alloc, vk::ImageLayout new_layout, u32 level, u32 level_count) {
+void TextureRuntime::Transition(ImageAlloc& alloc, vk::ImageLayout new_layout, u32 level,
+                                u32 level_count) {
     LayoutTracker& tracker = alloc.tracker;
     if (tracker.IsRangeEqual(new_layout, level, level_count) || !alloc.image) {
         return;
@@ -601,26 +605,25 @@ void TextureRuntime::Transition(ImageAlloc& alloc, vk::ImageLayout new_layout, u
     LayoutInfo dest = GetLayoutInfo(new_layout);
     tracker.ForEachLayoutRange(
         level, level_count, new_layout, [&](u32 start, u32 count, vk::ImageLayout old_layout) {
-        scheduler.Record([old_layout, new_layout, dest, start, count,
-                         image = alloc.image, aspect = alloc.aspect,
-                         layers = alloc.layers, GetLayoutInfo](vk::CommandBuffer render_cmdbuf, vk::CommandBuffer) {
-            LayoutInfo source = GetLayoutInfo(old_layout);
-                const vk::ImageMemoryBarrier barrier = {
-                    .srcAccessMask = source.access,
-                    .dstAccessMask = dest.access,
-                    .oldLayout = old_layout,
-                    .newLayout = new_layout,
-                    .image = image,
-                    .subresourceRange = {.aspectMask = aspect,
-                                         .baseMipLevel = start,
-                                         .levelCount = count,
-                                         .baseArrayLayer = 0,
-                                         .layerCount = layers}};
+            scheduler.Record([old_layout, new_layout, dest, start, count, image = alloc.image,
+                              aspect = alloc.aspect, layers = alloc.layers,
+                              GetLayoutInfo](vk::CommandBuffer render_cmdbuf, vk::CommandBuffer) {
+                LayoutInfo source = GetLayoutInfo(old_layout);
+                const vk::ImageMemoryBarrier barrier = {.srcAccessMask = source.access,
+                                                        .dstAccessMask = dest.access,
+                                                        .oldLayout = old_layout,
+                                                        .newLayout = new_layout,
+                                                        .image = image,
+                                                        .subresourceRange = {.aspectMask = aspect,
+                                                                             .baseMipLevel = start,
+                                                                             .levelCount = count,
+                                                                             .baseArrayLayer = 0,
+                                                                             .layerCount = layers}};
 
                 render_cmdbuf.pipelineBarrier(source.stage, dest.stage,
-                                               vk::DependencyFlagBits::eByRegion, {}, {}, barrier);
-           });
-    });
+                                              vk::DependencyFlagBits::eByRegion, {}, {}, barrier);
+            });
+        });
 
     tracker.SetLayout(new_layout, level, level_count);
     for (u32 i = 0; i < level_count; i++) {
@@ -683,8 +686,8 @@ void Surface::Upload(const VideoCore::BufferTextureCopy& upload, const StagingDa
         ScaledUpload(upload, staging);
     } else {
         Transition(vk::ImageLayout::eTransferDstOptimal, upload.texture_level, 1);
-        scheduler.Record([aspect = alloc.aspect, image = alloc.image,
-                         format = alloc.format, staging, upload](vk::CommandBuffer render_cmdbuf, vk::CommandBuffer) {
+        scheduler.Record([aspect = alloc.aspect, image = alloc.image, format = alloc.format,
+                          staging, upload](vk::CommandBuffer render_cmdbuf, vk::CommandBuffer) {
             u32 region_count = 0;
             std::array<vk::BufferImageCopy, 2> copy_regions;
 
@@ -713,8 +716,9 @@ void Surface::Upload(const VideoCore::BufferTextureCopy& upload, const StagingDa
                 }
             }
 
-            render_cmdbuf.copyBufferToImage(staging.buffer, image, vk::ImageLayout::eTransferDstOptimal,
-                                            region_count, copy_regions.data());
+            render_cmdbuf.copyBufferToImage(staging.buffer, image,
+                                            vk::ImageLayout::eTransferDstOptimal, region_count,
+                                            copy_regions.data());
         });
 
         runtime.upload_buffer.Commit(staging.size);
@@ -741,8 +745,8 @@ void Surface::Download(const VideoCore::BufferTextureCopy& download, const Stagi
         ScaledDownload(download, staging);
     } else {
         Transition(vk::ImageLayout::eTransferSrcOptimal, download.texture_level, 1);
-        scheduler.Record([aspect = alloc.aspect, image = alloc.image,
-                         staging, download](vk::CommandBuffer render_cmdbuf, vk::CommandBuffer){
+        scheduler.Record([aspect = alloc.aspect, image = alloc.image, staging,
+                          download](vk::CommandBuffer render_cmdbuf, vk::CommandBuffer) {
             const VideoCore::Rect2D rect = download.texture_rect;
             const vk::BufferImageCopy copy_region = {
                 .bufferOffset = staging.buffer_offset + download.buffer_offset,
@@ -756,7 +760,7 @@ void Surface::Download(const VideoCore::BufferTextureCopy& download, const Stagi
                 .imageExtent = {rect.GetWidth(), rect.GetHeight(), 1}};
 
             render_cmdbuf.copyImageToBuffer(image, vk::ImageLayout::eTransferSrcOptimal,
-                                             staging.buffer, copy_region);
+                                            staging.buffer, copy_region);
         });
         runtime.download_buffer.Commit(staging.size);
     }

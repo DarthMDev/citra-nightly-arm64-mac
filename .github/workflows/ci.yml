@@ -157,7 +157,7 @@ jobs:
       - name: Deps
         run: |
           sudo apt-get update
-          sudo apt-get install ccache apksigner -y
+          sudo apt-get install glslang-tools ccache apksigner -y
       - name: Build
         run: ./.ci/android/build.sh
       - name: Copy and sign artifacts

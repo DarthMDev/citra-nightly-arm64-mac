@@ -68,6 +68,7 @@ add_library(common STATIC
     color.h
     common_funcs.h
     common_paths.h
+    common_precompiled_headers.h
     common_types.h
     construct.h
     file_util.cpp
@@ -94,11 +95,14 @@ add_library(common STATIC
     misc.cpp
     param_package.cpp
     param_package.h
+    precompiled_headers.h
     quaternion.h
     ring_buffer.h
     scm_rev.cpp
     scm_rev.h
     scope_exit.h
+    settings.cpp
+    settings.h
     serialization/atomic.h
     serialization/boost_discrete_interval.hpp
     serialization/boost_flat_set.h
@@ -149,4 +153,8 @@ set_target_properties(common PROPERTIES INTERPROCEDURAL_OPTIMIZATION ${ENABLE_LT
 
 if (ARCHITECTURE_x86_64)
     target_link_libraries(common PRIVATE xbyak)
+endif()
+
+if (CITRA_USE_PRECOMPILED_HEADERS)
+    target_precompile_headers(common PRIVATE precompiled_headers.h)
 endif()

@@ -11,6 +11,7 @@
 #include "common/assert.h"
 #include "common/common_types.h"
 #include "common/logging/log.h"
+#include "common/settings.h"
 #include "core/core.h"
 #include "core/hle/kernel/config_mem.h"
 #include "core/hle/kernel/memory.h"
@@ -19,7 +20,6 @@
 #include "core/hle/kernel/vm_manager.h"
 #include "core/hle/result.h"
 #include "core/memory.h"
-#include "core/settings.h"
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -52,7 +52,7 @@ enum N3DSMode : u8 {
 void KernelSystem::MemoryInit(u32 mem_type, u8 n3ds_mode) {
     ASSERT(mem_type != 1);
 
-    const bool is_new_3ds = Settings::values.is_new_3ds;
+    const bool is_new_3ds = Settings::values.is_new_3ds.GetValue();
     u32 reported_mem_type = mem_type;
     if (is_new_3ds) {
         if (n3ds_mode == MemoryMode::Mode6 || n3ds_mode == MemoryMode::Mode6_2) {
@@ -235,6 +235,25 @@ std::optional<u32> MemoryRegionInfo::LinearAllocate(u32 size) {
         ASSERT(interval.bounds() == boost::icl::interval_bounds::right_open());
         if (interval.upper() - interval.lower() >= size) {
             Interval allocated(interval.lower(), interval.lower() + size);
+            free_blocks -= allocated;
+            used += size;
+            return allocated.lower();
+        }
+    }
+
+    // No sufficient block found
+    return std::nullopt;
+}
+
+std::optional<u32> MemoryRegionInfo::RLinearAllocate(u32 size) {
+    ASSERT(!is_locked);
+
+    // Find the first sufficient continuous block from the upper address
+    for (auto iter = free_blocks.rbegin(); iter != free_blocks.rend(); ++iter) {
+        auto interval = *iter;
+        ASSERT(interval.bounds() == boost::icl::interval_bounds::right_open());
+        if (interval.upper() - interval.lower() >= size) {
+            Interval allocated(interval.upper() - size, interval.upper());
             free_blocks -= allocated;
             used += size;
             return allocated.lower();

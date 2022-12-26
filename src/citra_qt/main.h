@@ -184,6 +184,8 @@ private slots:
     void OnGameListOpenDirectory(const QString& directory);
     void OnGameListAddDirectory();
     void OnGameListShowList(bool show);
+    void OnGameListOpenPerGameProperties(const QString& file);
+    void OnConfigurePerGame();
     void OnMenuLoadFile();
     void OnMenuInstallCIA();
     void OnUpdateProgress(std::size_t written, std::size_t total);
@@ -239,6 +241,7 @@ private:
     void InstallCIA(QStringList filepaths);
     void HideMouseCursor();
     void ShowMouseCursor();
+    void OpenPerGameConfiguration(u64 title_id, const QString& file_name);
     void UpdateAPIIndicator(bool override);
 
     std::unique_ptr<Ui::MainWindow> ui;

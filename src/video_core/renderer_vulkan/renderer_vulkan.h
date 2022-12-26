@@ -10,12 +10,12 @@
 #include "common/math_util.h"
 #include "core/hw/gpu.h"
 #include "video_core/renderer_base.h"
-#include "video_core/renderer_vulkan/vk_instance.h"
 #include "video_core/renderer_vulkan/vk_descriptor_manager.h"
-#include "video_core/renderer_vulkan/vk_renderpass_cache.h"
-#include "video_core/renderer_vulkan/vk_swapchain.h"
+#include "video_core/renderer_vulkan/vk_instance.h"
 #include "video_core/renderer_vulkan/vk_rasterizer.h"
+#include "video_core/renderer_vulkan/vk_renderpass_cache.h"
 #include "video_core/renderer_vulkan/vk_scheduler.h"
+#include "video_core/renderer_vulkan/vk_swapchain.h"
 
 namespace Core {
 class TelemetrySession;

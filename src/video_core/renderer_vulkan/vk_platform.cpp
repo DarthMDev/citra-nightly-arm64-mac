@@ -63,21 +63,20 @@ vk::SurfaceKHR CreateSurface(vk::Instance instance, const Frontend::EmuWindow& e
 #elif defined(VK_USE_PLATFORM_METAL_EXT)
     if (window_info.type == Frontend::WindowSystemType::MacOS) {
         const vk::MetalSurfaceCreateInfoEXT macos_ci = {
-          .pLayer = static_cast<const CAMetalLayer*>(window_info.render_surface)
-        };
+            .pLayer = static_cast<const CAMetalLayer*>(window_info.render_surface)};
 
         if (instance.createMetalSurfaceEXT(&macos_ci, nullptr, &surface) != vk::Result::eSuccess) {
-          LOG_CRITICAL(Render_Vulkan, "Failed to initialize MacOS surface");
-          UNREACHABLE();
+            LOG_CRITICAL(Render_Vulkan, "Failed to initialize MacOS surface");
+            UNREACHABLE();
         }
     }
 #elif defined(VK_USE_PLATFORM_ANDROID_KHR)
     if (window_info.type == Frontend::WindowSystemType::Android) {
         vk::AndroidSurfaceCreateInfoKHR android_ci = {
-            .window = reinterpret_cast<ANativeWindow*>(window_info.render_surface)
-        };
+            .window = reinterpret_cast<ANativeWindow*>(window_info.render_surface)};
 
-        if (instance.createAndroidSurfaceKHR(&android_ci, nullptr, &surface) != vk::Result::eSuccess) {
+        if (instance.createAndroidSurfaceKHR(&android_ci, nullptr, &surface) !=
+            vk::Result::eSuccess) {
             LOG_CRITICAL(Render_Vulkan, "Failed to initialize Android surface");
             UNREACHABLE();
         }
@@ -145,9 +144,10 @@ std::vector<const char*> GetInstanceExtensions(Frontend::WindowSystemType window
     }
 
     for (const char* extension : extensions) {
-        const auto iter = std::find_if(properties.begin(), properties.end(), [extension](const auto& prop) {
-            return std::strcmp(extension, prop.extensionName) == 0;
-        });
+        const auto iter =
+            std::find_if(properties.begin(), properties.end(), [extension](const auto& prop) {
+                return std::strcmp(extension, prop.extensionName) == 0;
+            });
 
         if (iter == properties.end()) {
             LOG_ERROR(Render_Vulkan, "Required instance extension {} is not available", extension);

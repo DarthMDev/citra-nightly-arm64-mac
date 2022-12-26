@@ -4,13 +4,13 @@
 
 #include "video_core/renderer_opengl/texture_filters/bicubic/bicubic.h"
 
-#include "shaders/bicubic.frag"
-#include "shaders/tex_coord.vert"
+#include "video_core/host_shaders/texture_filtering/bicubic_frag.h"
+#include "video_core/host_shaders/texture_filtering/tex_coord_vert.h"
 
 namespace OpenGL {
 
 Bicubic::Bicubic(u16 scale_factor) : TextureFilterBase(scale_factor) {
-    program.Create(tex_coord_vert.data(), bicubic_frag.data());
+    program.Create(HostShaders::TEX_COORD_VERT, HostShaders::BICUBIC_FRAG);
     vao.Create();
     src_sampler.Create();
 

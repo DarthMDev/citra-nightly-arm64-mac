@@ -25,6 +25,7 @@ class FragmentModule : public Sirit::Module {
     static constexpr u32 NUM_TEV_STAGES = 6;
     static constexpr u32 NUM_LIGHTS = 8;
     static constexpr u32 NUM_LIGHTING_SAMPLERS = 24;
+
 public:
     FragmentModule(const PicaFSConfig& config);
     ~FragmentModule();
@@ -59,8 +60,8 @@ public:
 
     [[nodiscard]] Id AppendProcTexClamp(Id var, Pica::TexturingRegs::ProcTexClamp mode);
 
-    [[nodiscard]] Id AppendProcTexCombineAndMap(Pica::TexturingRegs::ProcTexCombiner combiner,
-                                                Id u, Id v, Id offset);
+    [[nodiscard]] Id AppendProcTexCombineAndMap(Pica::TexturingRegs::ProcTexCombiner combiner, Id u,
+                                                Id v, Id offset);
 
     /// Rounds the provided variable to the nearest 1/255th
     [[nodiscard]] Id Byteround(Id variable_id, u32 size = 1);
@@ -84,12 +85,14 @@ public:
     [[nodiscard]] Id AppendSource(Pica::TexturingRegs::TevStageConfig::Source source, s32 index);
 
     /// Writes the color components to use for the specified TEV stage color modifier
-    [[nodiscard]] Id AppendColorModifier(Pica::TexturingRegs::TevStageConfig::ColorModifier modifier,
-                                         Pica::TexturingRegs::TevStageConfig::Source source, s32 index);
+    [[nodiscard]] Id AppendColorModifier(
+        Pica::TexturingRegs::TevStageConfig::ColorModifier modifier,
+        Pica::TexturingRegs::TevStageConfig::Source source, s32 index);
 
     /// Writes the alpha component to use for the specified TEV stage alpha modifier
-    [[nodiscard]] Id AppendAlphaModifier(Pica::TexturingRegs::TevStageConfig::AlphaModifier modifier,
-                                         Pica::TexturingRegs::TevStageConfig::Source source, s32 index);
+    [[nodiscard]] Id AppendAlphaModifier(
+        Pica::TexturingRegs::TevStageConfig::AlphaModifier modifier,
+        Pica::TexturingRegs::TevStageConfig::Source source, s32 index);
 
     /// Writes the combiner function for the color components for the specified TEV stage operation
     [[nodiscard]] Id AppendColorCombiner(Pica::TexturingRegs::TevStageConfig::Operation operation);

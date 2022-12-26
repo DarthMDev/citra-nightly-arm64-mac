@@ -4,13 +4,13 @@
 
 #include "video_core/renderer_opengl/texture_filters/scale_force/scale_force.h"
 
-#include "shaders/scale_force.frag"
-#include "shaders/tex_coord.vert"
+#include "video_core/host_shaders/texture_filtering/scale_force_frag.h"
+#include "video_core/host_shaders/texture_filtering/tex_coord_vert.h"
 
 namespace OpenGL {
 
 ScaleForce::ScaleForce(u16 scale_factor) : TextureFilterBase(scale_factor) {
-    program.Create(tex_coord_vert.data(), scale_force_frag.data());
+    program.Create(HostShaders::TEX_COORD_VERT, HostShaders::SCALE_FORCE_FRAG);
     vao.Create();
     src_sampler.Create();
 

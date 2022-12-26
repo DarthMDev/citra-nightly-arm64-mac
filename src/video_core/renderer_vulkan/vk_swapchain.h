@@ -16,13 +16,13 @@ class RenderpassCache;
 
 class Swapchain {
     static constexpr u32 PREFERRED_IMAGE_COUNT = 8;
+
 public:
-    Swapchain(const Instance& instance, Scheduler& scheduler,
-              RenderpassCache& renderpass_cache);
+    Swapchain(const Instance& instance, Scheduler& scheduler, RenderpassCache& renderpass_cache);
     ~Swapchain();
 
     /// Creates (or recreates) the swapchain with a given size.
-    void Create(u32 width, u32 height);
+    void Create();
 
     /// Acquires the next image in the swapchain.
     void AcquireNextImage();
@@ -76,7 +76,7 @@ private:
     void SetPresentMode();
 
     /// Sets the surface properties according to device capabilities
-    void SetSurfaceProperties(u32 width, u32 height);
+    void SetSurfaceProperties();
 
     /// Destroys current swapchain resources
     void Destroy();

@@ -4,8 +4,8 @@
 #pragma once
 
 #include <atomic>
-#include <thread>
 #include <limits>
+#include <thread>
 #include "common/common_types.h"
 #include "video_core/renderer_vulkan/vk_common.h"
 
@@ -78,7 +78,8 @@ public:
             .pValues = &tick,
         };
 
-        while (device.waitSemaphoresKHR(&wait_info, WAIT_TIMEOUT) != vk::Result::eSuccess) {}
+        while (device.waitSemaphoresKHR(&wait_info, WAIT_TIMEOUT) != vk::Result::eSuccess) {
+        }
         Refresh();
     }
 

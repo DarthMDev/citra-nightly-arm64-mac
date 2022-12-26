@@ -19,6 +19,7 @@
 #include "common/microprofile.h"
 #include "common/scm_rev.h"
 #include "common/scope_exit.h"
+#include "common/settings.h"
 #include "common/string_util.h"
 #include "core/core.h"
 #include "core/dumping/backend.h"
@@ -27,7 +28,6 @@
 #include "core/hle/service/am/am.h"
 #include "core/hle/service/cfg/cfg.h"
 #include "core/movie.h"
-#include "core/settings.h"
 #include "input_common/main.h"
 #include "network/network.h"
 #include "video_core/renderer_base.h"
@@ -167,7 +167,7 @@ static void OnStatusMessageReceived(const Network::StatusMessageEntry& msg) {
 
 static void InitializeLogging() {
     Log::Filter log_filter(Log::Level::Debug);
-    log_filter.ParseFilterString(Settings::values.log_filter);
+    log_filter.ParseFilterString(Settings::values.log_filter.GetValue());
     Log::SetGlobalFilter(log_filter);
 
     Log::AddBackend(std::make_unique<Log::ColorConsoleBackend>());
@@ -185,8 +185,8 @@ int main(int argc, char** argv) {
     Common::DetachedTasks detached_tasks;
     Config config;
     int option_index = 0;
-    bool use_gdbstub = Settings::values.use_gdbstub;
-    u32 gdb_port = static_cast<u32>(Settings::values.gdbstub_port);
+    bool use_gdbstub = Settings::values.use_gdbstub.GetValue();
+    u32 gdb_port = static_cast<u32>(Settings::values.gdbstub_port.GetValue());
     std::string movie_record;
     std::string movie_record_author;
     std::string movie_play;
@@ -356,7 +356,7 @@ int main(int argc, char** argv) {
     EmuWindow_SDL2::InitializeSDL2();
 
     const auto emu_window{std::make_unique<EmuWindow_SDL2>(fullscreen, false)};
-    const bool use_secondary_window{Settings::values.layout_option ==
+    const bool use_secondary_window{Settings::values.layout_option.GetValue() ==
                                     Settings::LayoutOption::SeparateWindows};
     const auto secondary_window =
         use_secondary_window ? std::make_unique<EmuWindow_SDL2>(false, true) : nullptr;

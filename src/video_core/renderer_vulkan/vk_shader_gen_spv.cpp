@@ -16,7 +16,8 @@ using TevStageConfig = TexturingRegs::TevStageConfig;
 
 namespace Vulkan {
 
-FragmentModule::FragmentModule(const PicaFSConfig& config) : Sirit::Module{0x00010300}, config{config} {
+FragmentModule::FragmentModule(const PicaFSConfig& config)
+    : Sirit::Module{0x00010300}, config{config} {
     DefineArithmeticTypes();
     DefineUniformStructs();
     DefineInterface();
@@ -61,13 +62,13 @@ void FragmentModule::Generate() {
     }
 
     if (config.state.fog_mode == TexturingRegs::FogMode::Gas) {
-            Core::System::GetInstance().TelemetrySession().AddField(
-                Common::Telemetry::FieldType::Session, "VideoCore_Pica_UseGasMode", true);
-            LOG_CRITICAL(Render_Vulkan, "Unimplemented gas mode");
-            OpKill();
-            OpFunctionEnd();
-            return;
-        }
+        Core::System::GetInstance().TelemetrySession().AddField(
+            Common::Telemetry::FieldType::Session, "VideoCore_Pica_UseGasMode", true);
+        LOG_CRITICAL(Render_Vulkan, "Unimplemented gas mode");
+        OpKill();
+        OpFunctionEnd();
+        return;
+    }
 
     // After perspective divide, OpenGL transform z_over_w from [-1, 1] to [near, far]. Here we use
     // default near = 0 and far = 1, and undo the transformation to get the original z_over_w, then
@@ -82,13 +83,15 @@ void FragmentModule::Generate() {
 
 void FragmentModule::WriteDepth() {
     const Id input_pointer_id{TypePointer(spv::StorageClass::Input, f32_id)};
-    const Id gl_frag_coord_z{OpLoad(f32_id, OpAccessChain(input_pointer_id, gl_frag_coord_id, ConstU32(2u)))};
+    const Id gl_frag_coord_z{
+        OpLoad(f32_id, OpAccessChain(input_pointer_id, gl_frag_coord_id, ConstU32(2u)))};
     const Id z_over_w{OpFma(f32_id, ConstF32(2.f), gl_frag_coord_z, ConstF32(-1.f))};
     const Id depth_scale{GetShaderDataMember(f32_id, ConstS32(2))};
     const Id depth_offset{GetShaderDataMember(f32_id, ConstS32(3))};
     const Id depth{OpFma(f32_id, z_over_w, depth_scale, depth_offset)};
     if (config.state.depthmap_enable == Pica::RasterizerRegs::DepthBuffering::WBuffering) {
-        const Id gl_frag_coord_w{OpLoad(f32_id, OpAccessChain(input_pointer_id, gl_frag_coord_id, ConstU32(3u)))};
+        const Id gl_frag_coord_w{
+            OpLoad(f32_id, OpAccessChain(input_pointer_id, gl_frag_coord_id, ConstU32(3u)))};
         const Id depth_over_w{OpFDiv(f32_id, depth, gl_frag_coord_w)};
         OpStore(gl_frag_depth_id, depth_over_w);
     } else {
@@ -157,8 +160,10 @@ void FragmentModule::WriteLighting() {
         const Id q_xyz{OpVectorShuffle(vec_ids.Get(3), q, q, 0, 1, 2)};
         const Id q_xyz_cross_v{OpCross(vec_ids.Get(3), q_xyz, v)};
         const Id q_w{OpCompositeExtract(f32_id, q, 3)};
-        const Id val1{OpFAdd(vec_ids.Get(3), q_xyz_cross_v, OpVectorTimesScalar(vec_ids.Get(3), v, q_w))};
-        const Id val2{OpVectorTimesScalar(vec_ids.Get(3), OpCross(vec_ids.Get(3), q_xyz, val1), ConstF32(2.f))};
+        const Id val1{
+            OpFAdd(vec_ids.Get(3), q_xyz_cross_v, OpVectorTimesScalar(vec_ids.Get(3), v, q_w))};
+        const Id val2{OpVectorTimesScalar(vec_ids.Get(3), OpCross(vec_ids.Get(3), q_xyz, val1),
+                                          ConstF32(2.f))};
         return OpFAdd(vec_ids.Get(3), v, val2);
     };
 
@@ -189,7 +194,8 @@ void FragmentModule::WriteLighting() {
         const Id index{OpSClamp(i32_id, pos_int, ConstS32(-128), ConstS32(127))};
         const Id neg_index{OpFNegate(f32_id, OpConvertSToF(f32_id, index))};
         const Id delta{OpFma(f32_id, pos, ConstF32(128.f), neg_index)};
-        const Id increment{OpSelect(i32_id, OpSLessThan(bool_id, index, ConstS32(0)), ConstS32(256), ConstS32(0))};
+        const Id increment{
+            OpSelect(i32_id, OpSLessThan(bool_id, index, ConstS32(0)), ConstS32(256), ConstS32(0))};
         return LookupLightingLUT(lut_index, OpIAdd(i32_id, index, increment), delta);
     };
 
@@ -203,7 +209,8 @@ void FragmentModule::WriteLighting() {
             index = OpDot(f32_id, normal, OpNormalize(vec_ids.Get(3), half_vector));
             break;
         case LightingRegs::LightingLutInput::VH:
-            index = OpDot(f32_id, OpNormalize(vec_ids.Get(3), view), OpNormalize(vec_ids.Get(3), half_vector));
+            index = OpDot(f32_id, OpNormalize(vec_ids.Get(3), view),
+                          OpNormalize(vec_ids.Get(3), half_vector));
             break;
         case LightingRegs::LightingLutInput::NV:
             index = OpDot(f32_id, normal, OpNormalize(vec_ids.Get(3), view));
@@ -222,8 +229,10 @@ void FragmentModule::WriteLighting() {
                 // using the modified normal vector.
                 const Id normalized_half_vector{OpNormalize(vec_ids.Get(3), half_vector)};
                 const Id normal_dot_half_vector{OpDot(f32_id, normal, normalized_half_vector)};
-                const Id normal_mul_dot{OpVectorTimesScalar(vec_ids.Get(3), normal, normal_dot_half_vector)};
-                const Id half_angle_proj{OpFSub(vec_ids.Get(3), normalized_half_vector, normal_mul_dot)};
+                const Id normal_mul_dot{
+                    OpVectorTimesScalar(vec_ids.Get(3), normal, normal_dot_half_vector)};
+                const Id half_angle_proj{
+                    OpFSub(vec_ids.Get(3), normalized_half_vector, normal_mul_dot)};
 
                 // Note: the half angle vector projection is confirmed not normalized before the dot
                 // product. The result is in fact not cos(phi) as the name suggested.
@@ -267,7 +276,8 @@ void FragmentModule::WriteLighting() {
         if (light_config.directional) {
             light_vector = OpNormalize(vec_ids.Get(3), light_position);
         } else {
-            light_vector = OpNormalize(vec_ids.Get(3), OpFAdd(vec_ids.Get(3), light_position, view));
+            light_vector =
+                OpNormalize(vec_ids.Get(3), OpFAdd(vec_ids.Get(3), light_position, view));
         }
 
         spot_dir = GetLightMember(5);
@@ -292,7 +302,8 @@ void FragmentModule::WriteLighting() {
             LightingRegs::IsLightingSamplerSupported(
                 lighting.config, LightingRegs::LightingSampler::SpotlightAttenuation)) {
             const Id value{GetLutValue(LightingRegs::SpotlightAttenuationSampler(light_config.num),
-                            light_config.num, lighting.lut_sp.type, lighting.lut_sp.abs_input)};
+                                       light_config.num, lighting.lut_sp.type,
+                                       lighting.lut_sp.abs_input)};
             spot_atten = OpFMul(f32_id, ConstF32(lighting.lut_sp.scale), value);
         }
 
@@ -301,16 +312,20 @@ void FragmentModule::WriteLighting() {
         if (light_config.dist_atten_enable) {
             const Id dist_atten_scale{GetLightMember(7)};
             const Id dist_atten_bias{GetLightMember(6)};
-            const Id min_view_min_pos{OpFSub(vec_ids.Get(3), OpFNegate(vec_ids.Get(3), view), light_position)};
-            const Id index{OpFma(f32_id, dist_atten_scale, OpLength(f32_id, min_view_min_pos), dist_atten_bias)};
+            const Id min_view_min_pos{
+                OpFSub(vec_ids.Get(3), OpFNegate(vec_ids.Get(3), view), light_position)};
+            const Id index{OpFma(f32_id, dist_atten_scale, OpLength(f32_id, min_view_min_pos),
+                                 dist_atten_bias)};
             const Id clamped_index{OpFClamp(f32_id, index, ConstF32(0.f), ConstF32(1.f))};
-            const Id sampler{ConstS32(static_cast<s32>(LightingRegs::DistanceAttenuationSampler(light_config.num)))};
+            const Id sampler{ConstS32(
+                static_cast<s32>(LightingRegs::DistanceAttenuationSampler(light_config.num)))};
             dist_atten = LookupLightingLUTUnsigned(sampler, clamped_index);
         }
 
         if (light_config.geometric_factor_0 || light_config.geometric_factor_1) {
             geo_factor = OpDot(f32_id, half_vector, half_vector);
-            const Id dot_div_geo{OpFMin(f32_id, OpFDiv(f32_id, dot_product, geo_factor), ConstF32(1.f))};
+            const Id dot_div_geo{
+                OpFMin(f32_id, OpFDiv(f32_id, dot_product, geo_factor), ConstF32(1.f))};
             const Id is_geo_factor_zero{OpFOrdEqual(bool_id, geo_factor, ConstF32(0.f))};
             geo_factor = OpSelect(f32_id, is_geo_factor_zero, ConstF32(0.f), dot_div_geo);
         }
@@ -321,8 +336,9 @@ void FragmentModule::WriteLighting() {
             LightingRegs::IsLightingSamplerSupported(
                 lighting.config, LightingRegs::LightingSampler::Distribution0)) {
             // Lookup specular "distribution 0" LUT value
-            const Id value{GetLutValue(LightingRegs::LightingSampler::Distribution0, light_config.num,
-                            lighting.lut_d0.type, lighting.lut_d0.abs_input)};
+            const Id value{GetLutValue(LightingRegs::LightingSampler::Distribution0,
+                                       light_config.num, lighting.lut_d0.type,
+                                       lighting.lut_d0.abs_input)};
             d0_lut_value = OpFMul(f32_id, ConstF32(lighting.lut_d0.scale), value);
         }
 
@@ -337,7 +353,7 @@ void FragmentModule::WriteLighting() {
             LightingRegs::IsLightingSamplerSupported(lighting.config,
                                                      LightingRegs::LightingSampler::ReflectRed)) {
             const Id value{GetLutValue(LightingRegs::LightingSampler::ReflectRed, light_config.num,
-                           lighting.lut_rr.type, lighting.lut_rr.abs_input)};
+                                       lighting.lut_rr.type, lighting.lut_rr.abs_input)};
 
             refl_value_r = OpFMul(f32_id, ConstF32(lighting.lut_rr.scale), value);
         }
@@ -347,8 +363,9 @@ void FragmentModule::WriteLighting() {
         if (lighting.lut_rg.enable &&
             LightingRegs::IsLightingSamplerSupported(lighting.config,
                                                      LightingRegs::LightingSampler::ReflectGreen)) {
-            const Id value{GetLutValue(LightingRegs::LightingSampler::ReflectGreen, light_config.num,
-                           lighting.lut_rg.type, lighting.lut_rg.abs_input)};
+            const Id value{GetLutValue(LightingRegs::LightingSampler::ReflectGreen,
+                                       light_config.num, lighting.lut_rg.type,
+                                       lighting.lut_rg.abs_input)};
 
             refl_value_g = OpFMul(f32_id, ConstF32(lighting.lut_rg.scale), value);
         }
@@ -359,7 +376,7 @@ void FragmentModule::WriteLighting() {
             LightingRegs::IsLightingSamplerSupported(lighting.config,
                                                      LightingRegs::LightingSampler::ReflectBlue)) {
             const Id value{GetLutValue(LightingRegs::LightingSampler::ReflectBlue, light_config.num,
-                           lighting.lut_rb.type, lighting.lut_rb.abs_input)};
+                                       lighting.lut_rb.type, lighting.lut_rb.abs_input)};
             refl_value_b = OpFMul(f32_id, ConstF32(lighting.lut_rb.scale), value);
         }
 
@@ -369,14 +386,18 @@ void FragmentModule::WriteLighting() {
             LightingRegs::IsLightingSamplerSupported(
                 lighting.config, LightingRegs::LightingSampler::Distribution1)) {
             // Lookup specular "distribution 1" LUT value
-            const Id value{GetLutValue(LightingRegs::LightingSampler::Distribution1, light_config.num,
-                            lighting.lut_d1.type, lighting.lut_d1.abs_input)};
+            const Id value{GetLutValue(LightingRegs::LightingSampler::Distribution1,
+                                       light_config.num, lighting.lut_d1.type,
+                                       lighting.lut_d1.abs_input)};
             d1_lut_value = OpFMul(f32_id, ConstF32(lighting.lut_d1.scale), value);
         }
 
-        const Id refl_value{OpCompositeConstruct(vec_ids.Get(3), refl_value_r, refl_value_g, refl_value_b)};
+        const Id refl_value{
+            OpCompositeConstruct(vec_ids.Get(3), refl_value_r, refl_value_g, refl_value_b)};
         const Id light_specular_1{GetLightMember(1)};
-        Id specular_1{OpFMul(vec_ids.Get(3), OpVectorTimesScalar(vec_ids.Get(3), refl_value, d1_lut_value), light_specular_1)};
+        Id specular_1{OpFMul(vec_ids.Get(3),
+                             OpVectorTimesScalar(vec_ids.Get(3), refl_value, d1_lut_value),
+                             light_specular_1)};
         if (light_config.geometric_factor_1) {
             specular_1 = OpVectorTimesScalar(vec_ids.Get(3), specular_1, geo_factor);
         }
@@ -388,7 +409,7 @@ void FragmentModule::WriteLighting() {
                                                      LightingRegs::LightingSampler::Fresnel)) {
             // Lookup fresnel LUT value
             Id value{GetLutValue(LightingRegs::LightingSampler::Fresnel, light_config.num,
-                     lighting.lut_fr.type, lighting.lut_fr.abs_input)};
+                                 lighting.lut_fr.type, lighting.lut_fr.abs_input)};
             value = OpFMul(f32_id, ConstF32(lighting.lut_fr.scale), value);
 
             // Enabled for diffuse lighting alpha component
@@ -403,12 +424,13 @@ void FragmentModule::WriteLighting() {
         }
 
         const bool shadow_primary_enable = lighting.shadow_primary && light_config.shadow_enable;
-        const bool shadow_secondary_enable = lighting.shadow_secondary && light_config.shadow_enable;
+        const bool shadow_secondary_enable =
+            lighting.shadow_secondary && light_config.shadow_enable;
         const Id shadow_rgb{OpVectorShuffle(vec_ids.Get(3), shadow, shadow, 0, 1, 2)};
 
         const Id light_diffuse{GetLightMember(2)};
         const Id light_ambient{GetLightMember(3)};
-        const Id diffuse_mul_dot{OpVectorTimesScalar(vec_ids.Get(3),light_diffuse, dot_product)};
+        const Id diffuse_mul_dot{OpVectorTimesScalar(vec_ids.Get(3), light_diffuse, dot_product)};
 
         // Compute primary fragment color (diffuse lighting) function
         Id diffuse_sum_rgb{OpFAdd(vec_ids.Get(3), diffuse_mul_dot, light_ambient)};
@@ -437,7 +459,8 @@ void FragmentModule::WriteLighting() {
     // Apply shadow attenuation to alpha components if enabled
     if (lighting.shadow_alpha) {
         const Id shadow_a{OpCompositeExtract(f32_id, shadow, 3)};
-        const Id shadow_a_vec{OpCompositeConstruct(vec_ids.Get(4), ConstF32(1.f, 1.f, 1.f), shadow_a)};
+        const Id shadow_a_vec{
+            OpCompositeConstruct(vec_ids.Get(4), ConstF32(1.f, 1.f, 1.f), shadow_a)};
         if (lighting.enable_primary_alpha) {
             diffuse_sum = OpFMul(vec_ids.Get(4), diffuse_sum, shadow_a_vec);
         }
@@ -448,7 +471,8 @@ void FragmentModule::WriteLighting() {
 
     // Sum final lighting result
     const Id lighting_global_ambient{GetShaderDataMember(vec_ids.Get(3), ConstS32(24))};
-    const Id lighting_global_ambient_rgba{PadVectorF32(lighting_global_ambient, vec_ids.Get(4), 0.f)};
+    const Id lighting_global_ambient_rgba{
+        PadVectorF32(lighting_global_ambient, vec_ids.Get(4), 0.f)};
     const Id zero_vec{ConstF32(0.f, 0.f, 0.f, 0.f)};
     const Id one_vec{ConstF32(1.f, 1.f, 1.f, 1.f)};
     diffuse_sum = OpFAdd(vec_ids.Get(4), diffuse_sum, lighting_global_ambient_rgba);
@@ -484,27 +508,35 @@ void FragmentModule::WriteTevStage(s32 index) {
             // result of Dot3_RGBA operation is also placed to the alpha component
             alpha_output = OpCompositeExtract(f32_id, color_output, 0);
         } else {
-            alpha_results_1 = AppendAlphaModifier(stage.alpha_modifier1, stage.alpha_source1, index);
-            alpha_results_2 = AppendAlphaModifier(stage.alpha_modifier2, stage.alpha_source2, index);
-            alpha_results_3 = AppendAlphaModifier(stage.alpha_modifier3, stage.alpha_source3, index);
+            alpha_results_1 =
+                AppendAlphaModifier(stage.alpha_modifier1, stage.alpha_source1, index);
+            alpha_results_2 =
+                AppendAlphaModifier(stage.alpha_modifier2, stage.alpha_source2, index);
+            alpha_results_3 =
+                AppendAlphaModifier(stage.alpha_modifier3, stage.alpha_source3, index);
 
             alpha_output = Byteround(AppendAlphaCombiner(stage.alpha_op));
         }
 
-        color_output = OpVectorTimesScalar(vec_ids.Get(3), color_output, ConstF32(static_cast<float>(stage.GetColorMultiplier())));
-        color_output = OpFClamp(vec_ids.Get(3), color_output, ConstF32(0.f, 0.f, 0.f), ConstF32(1.f, 1.f, 1.f));
-        alpha_output = OpFMul(f32_id, alpha_output, ConstF32(static_cast<float>(stage.GetAlphaMultiplier())));
+        color_output = OpVectorTimesScalar(
+            vec_ids.Get(3), color_output, ConstF32(static_cast<float>(stage.GetColorMultiplier())));
+        color_output = OpFClamp(vec_ids.Get(3), color_output, ConstF32(0.f, 0.f, 0.f),
+                                ConstF32(1.f, 1.f, 1.f));
+        alpha_output =
+            OpFMul(f32_id, alpha_output, ConstF32(static_cast<float>(stage.GetAlphaMultiplier())));
         alpha_output = OpFClamp(f32_id, alpha_output, ConstF32(0.f), ConstF32(1.f));
         last_tex_env_out = OpCompositeConstruct(vec_ids.Get(4), color_output, alpha_output);
     }
 
     combiner_buffer = next_combiner_buffer;
     if (config.TevStageUpdatesCombinerBufferColor(index)) {
-        next_combiner_buffer = OpVectorShuffle(vec_ids.Get(4), last_tex_env_out, next_combiner_buffer, 0, 1, 2, 7);
+        next_combiner_buffer =
+            OpVectorShuffle(vec_ids.Get(4), last_tex_env_out, next_combiner_buffer, 0, 1, 2, 7);
     }
 
     if (config.TevStageUpdatesCombinerBufferAlpha(index)) {
-        next_combiner_buffer = OpVectorShuffle(vec_ids.Get(4), next_combiner_buffer, last_tex_env_out, 0, 1, 2, 7);
+        next_combiner_buffer =
+            OpVectorShuffle(vec_ids.Get(4), next_combiner_buffer, last_tex_env_out, 0, 1, 2, 7);
     }
 }
 
@@ -549,7 +581,8 @@ bool FragmentModule::WriteAlphaTestCondition(FramebufferRegs::CompareFunc func) 
     case CompareFunc::LessThanOrEqual:
     case CompareFunc::GreaterThan:
     case CompareFunc::GreaterThanOrEqual: {
-        const Id alpha_scaled{OpFMul(f32_id, OpCompositeExtract(f32_id, last_tex_env_out, 3), ConstF32(255.f))};
+        const Id alpha_scaled{
+            OpFMul(f32_id, OpCompositeExtract(f32_id, last_tex_env_out, 3), ConstF32(255.f))};
         const Id alpha_int{OpConvertFToS(i32_id, alpha_scaled)};
         const Id alphatest_ref{GetShaderDataMember(i32_id, ConstS32(1))};
         const Id alpha_comp_ref{Compare(alpha_int, alphatest_ref)};
@@ -588,9 +621,11 @@ Id FragmentModule::SampleTexture(u32 texture_unit) {
         const Id abs_dfdx_coord{OpFAbs(vec_ids.Get(2), OpDPdx(vec_ids.Get(2), coord))};
         const Id abs_dfdy_coord{OpFAbs(vec_ids.Get(2), OpDPdy(vec_ids.Get(2), coord))};
         const Id d{OpFMax(vec_ids.Get(2), abs_dfdx_coord, abs_dfdy_coord)};
-        const Id dx_dy_max{OpFMax(f32_id, OpCompositeExtract(f32_id, d, 0), OpCompositeExtract(f32_id, d, 1))};
+        const Id dx_dy_max{
+            OpFMax(f32_id, OpCompositeExtract(f32_id, d, 0), OpCompositeExtract(f32_id, d, 1))};
         const Id lod{OpLog2(f32_id, dx_dy_max)};
-        return OpImageSampleExplicitLod(vec_ids.Get(4), sampled_image, texcoord, spv::ImageOperandsMask::Lod, lod);
+        return OpImageSampleExplicitLod(vec_ids.Get(4), sampled_image, texcoord,
+                                        spv::ImageOperandsMask::Lod, lod);
     };
 
     const auto Sample = [this](Id tex_id, Id tex_sampler_id, bool projection) {
@@ -600,9 +635,9 @@ Id FragmentModule::SampleTexture(u32 texture_unit) {
         const Id sampled_image{OpSampledImage(TypeSampledImage(image_type), tex, tex_sampler)};
         const Id texcoord0{OpLoad(vec_ids.Get(2), texcoord0_id)};
         const Id texcoord0_w{OpLoad(f32_id, texcoord0_w_id)};
-        const Id coord{OpCompositeConstruct(vec_ids.Get(3), OpCompositeExtract(f32_id, texcoord0, 0),
-                                                            OpCompositeExtract(f32_id, texcoord0, 1),
-                                                            texcoord0_w)};
+        const Id coord{OpCompositeConstruct(vec_ids.Get(3),
+                                            OpCompositeExtract(f32_id, texcoord0, 0),
+                                            OpCompositeExtract(f32_id, texcoord0, 1), texcoord0_w)};
         if (projection) {
             return OpImageSampleProjImplicitLod(vec_ids.Get(4), sampled_image, coord);
         } else {
@@ -622,8 +657,8 @@ Id FragmentModule::SampleTexture(u32 texture_unit) {
             return Sample(tex_cube_id, tex_cube_sampler_id, false);
         case Pica::TexturingRegs::TextureConfig::Shadow2D:
             return SampleShadow();
-        //case Pica::TexturingRegs::TextureConfig::ShadowCube:
-            //return "shadowTextureCube(texcoord0, texcoord0_w)";
+        // case Pica::TexturingRegs::TextureConfig::ShadowCube:
+        // return "shadowTextureCube(texcoord0, texcoord0_w)";
         case Pica::TexturingRegs::TextureConfig::Disabled:
             return zero_vec;
         default:
@@ -663,14 +698,16 @@ Id FragmentModule::CompareShadow(Id pixel, Id z) {
 Id FragmentModule::SampleShadow() {
     const Id texcoord0{OpLoad(vec_ids.Get(2), texcoord0_id)};
     const Id texcoord0_w{OpLoad(f32_id, texcoord0_w_id)};
-    const Id abs_min_w{OpFMul(f32_id, OpFMin(f32_id, OpFAbs(f32_id, texcoord0_w),
-                                             ConstF32(1.f)), ConstF32(16777215.f))};
+    const Id abs_min_w{OpFMul(f32_id, OpFMin(f32_id, OpFAbs(f32_id, texcoord0_w), ConstF32(1.f)),
+                              ConstF32(16777215.f))};
     const Id shadow_texture_bias{GetShaderDataMember(i32_id, ConstS32(17))};
-    const Id z_i32{OpSMax(i32_id, ConstS32(0), OpISub(i32_id, OpConvertFToS(i32_id, abs_min_w), shadow_texture_bias))};
+    const Id z_i32{OpSMax(i32_id, ConstS32(0),
+                          OpISub(i32_id, OpConvertFToS(i32_id, abs_min_w), shadow_texture_bias))};
     const Id z{OpBitcast(u32_id, z_i32)};
     const Id shadow_texture_px{OpLoad(image_r32_id, shadow_texture_px_id)};
     const Id px_size{OpImageQuerySize(ivec_ids.Get(2), shadow_texture_px)};
-    const Id coord{OpFma(vec_ids.Get(2), OpConvertSToF(vec_ids.Get(2), px_size), texcoord0, ConstF32(-0.5f, -0.5f))};
+    const Id coord{OpFma(vec_ids.Get(2), OpConvertSToF(vec_ids.Get(2), px_size), texcoord0,
+                         ConstF32(-0.5f, -0.5f))};
     const Id coord_floor{OpFloor(vec_ids.Get(2), coord)};
     const Id f{OpFSub(vec_ids.Get(2), coord_floor, coord)};
     const Id i{OpConvertFToS(ivec_ids.Get(2), coord_floor)};
@@ -681,7 +718,8 @@ Id FragmentModule::SampleShadow() {
         const Id end_label{OpLabel()};
         const Id uv_le_zero{OpSLessThan(bvec_ids.Get(2), uv, ConstS32(0, 0))};
         const Id uv_geq_size{OpSGreaterThanEqual(bvec_ids.Get(2), uv, px_size)};
-        const Id cond{OpAny(bool_id, OpCompositeConstruct(bvec_ids.Get(4), uv_le_zero, uv_geq_size))};
+        const Id cond{
+            OpAny(bool_id, OpCompositeConstruct(bvec_ids.Get(4), uv_le_zero, uv_geq_size))};
         OpSelectionMerge(end_label, spv::SelectionControlMask::MaskNone);
         OpBranchConditional(cond, true_label, false_label);
         AddLabel(true_label);
@@ -695,12 +733,11 @@ Id FragmentModule::SampleShadow() {
         return OpPhi(f32_id, ConstF32(1.f), true_label, result, false_label);
     };
 
-    const Id s_xy{OpCompositeConstruct(vec_ids.Get(2),
-               SampleShadow2D(i),
-               SampleShadow2D(OpIAdd(ivec_ids.Get(2), i, ConstS32(1, 0))))};
+    const Id s_xy{OpCompositeConstruct(vec_ids.Get(2), SampleShadow2D(i),
+                                       SampleShadow2D(OpIAdd(ivec_ids.Get(2), i, ConstS32(1, 0))))};
     const Id s_zw{OpCompositeConstruct(vec_ids.Get(2),
-               SampleShadow2D(OpIAdd(ivec_ids.Get(2), i, ConstS32(0, 1))),
-               SampleShadow2D(OpIAdd(ivec_ids.Get(2), i, ConstS32(1, 1))))};
+                                       SampleShadow2D(OpIAdd(ivec_ids.Get(2), i, ConstS32(0, 1))),
+                                       SampleShadow2D(OpIAdd(ivec_ids.Get(2), i, ConstS32(1, 1))))};
     const Id f_yy{OpVectorShuffle(vec_ids.Get(2), f, f, 1, 1)};
     const Id t{OpFMix(vec_ids.Get(2), s_xy, s_zw, f_yy)};
     const Id t_x{OpCompositeExtract(f32_id, t, 0)};
@@ -715,7 +752,8 @@ Id FragmentModule::AppendProcTexShiftOffset(Id v, ProcTexShift mode, ProcTexClam
     const Id v_i32{OpConvertFToS(i32_id, v)};
 
     const auto Shift = [&](bool even) -> Id {
-        const Id temp1{OpSDiv(i32_id, even ? OpIAdd(i32_id, v_i32, ConstS32(1)) : v_i32, ConstS32(2))};
+        const Id temp1{
+            OpSDiv(i32_id, even ? OpIAdd(i32_id, v_i32, ConstS32(1)) : v_i32, ConstS32(2))};
         const Id temp2{OpConvertSToF(f32_id, OpSMod(i32_id, temp1, ConstS32(2)))};
         return OpFMul(f32_id, offset, temp2);
     };
@@ -739,7 +777,8 @@ Id FragmentModule::AppendProcTexClamp(Id var, ProcTexClamp mode) {
 
     const auto MirroredRepeat = [&]() -> Id {
         const Id fract{OpFract(f32_id, var)};
-        const Id cond{OpIEqual(bool_id, OpSMod(i32_id, OpConvertFToS(i32_id, var), ConstS32(2)), ConstS32(0))};
+        const Id cond{OpIEqual(bool_id, OpSMod(i32_id, OpConvertFToS(i32_id, var), ConstS32(2)),
+                               ConstS32(0))};
         return OpSelect(f32_id, cond, fract, OpFSub(f32_id, one, fract));
     };
 
@@ -802,8 +841,10 @@ void FragmentModule::DefineProcTexSampler() {
 
     // Define noise tables at the beginning of the function
     if (config.state.proctex.noise_enable) {
-        noise1d_table = DefineVar<false>(TypeArray(i32_id, ConstU32(16u)), spv::StorageClass::Function);
-        noise2d_table = DefineVar<false>(TypeArray(i32_id, ConstU32(16u)), spv::StorageClass::Function);
+        noise1d_table =
+            DefineVar<false>(TypeArray(i32_id, ConstU32(16u)), spv::StorageClass::Function);
+        noise2d_table =
+            DefineVar<false>(TypeArray(i32_id, ConstU32(16u)), spv::StorageClass::Function);
     }
     lut_offsets = DefineVar<false>(TypeArray(i32_id, ConstU32(8u)), spv::StorageClass::Function);
 
@@ -811,9 +852,15 @@ void FragmentModule::DefineProcTexSampler() {
     if (config.state.proctex.coord < 3) {
         Id texcoord_id{};
         switch (config.state.proctex.coord.Value()) {
-        case 0: texcoord_id = texcoord0_id; break;
-        case 1: texcoord_id = texcoord1_id; break;
-        case 2: texcoord_id = texcoord2_id; break;
+        case 0:
+            texcoord_id = texcoord0_id;
+            break;
+        case 1:
+            texcoord_id = texcoord1_id;
+            break;
+        case 2:
+            texcoord_id = texcoord2_id;
+            break;
         }
 
         const Id texcoord{OpLoad(vec_ids.Get(2), texcoord_id)};
@@ -833,13 +880,16 @@ void FragmentModule::DefineProcTexSampler() {
 
     // unlike normal texture, the bias is inside the log2
     const Id proctex_bias{GetShaderDataMember(f32_id, ConstS32(16))};
-    const Id bias{OpFMul(f32_id, ConstF32(static_cast<f32>(config.state.proctex.lut_width)), proctex_bias)};
-    const Id duv_xy{OpFAdd(f32_id, OpCompositeExtract(f32_id, duv, 0), OpCompositeExtract(f32_id, duv, 1))};
+    const Id bias{
+        OpFMul(f32_id, ConstF32(static_cast<f32>(config.state.proctex.lut_width)), proctex_bias)};
+    const Id duv_xy{
+        OpFAdd(f32_id, OpCompositeExtract(f32_id, duv, 0), OpCompositeExtract(f32_id, duv, 1))};
 
     Id lod{OpLog2(f32_id, OpFMul(f32_id, OpFAbs(f32_id, bias), duv_xy))};
     lod = OpSelect(f32_id, OpFOrdEqual(bool_id, proctex_bias, ConstF32(0.f)), ConstF32(0.f), lod);
-    lod = OpFClamp(f32_id, lod, ConstF32(std::max(0.0f, static_cast<float>(config.state.proctex.lod_min))),
-                                ConstF32(std::min(7.0f, static_cast<float>(config.state.proctex.lod_max))));
+    lod = OpFClamp(f32_id, lod,
+                   ConstF32(std::max(0.0f, static_cast<float>(config.state.proctex.lod_min))),
+                   ConstF32(std::min(7.0f, static_cast<float>(config.state.proctex.lod_max))));
 
     // Get shift offset before noise generation
     const Id u_shift{AppendProcTexShiftOffset(OpCompositeExtract(f32_id, uv, 1),
@@ -853,7 +903,8 @@ void FragmentModule::DefineProcTexSampler() {
     if (config.state.proctex.noise_enable) {
         const Id proctex_noise_a{GetShaderDataMember(vec_ids.Get(2), ConstS32(22))};
         const Id noise_coef{ProcTexNoiseCoef(uv)};
-        uv = OpFAdd(vec_ids.Get(2), uv, OpVectorTimesScalar(vec_ids.Get(2), proctex_noise_a, noise_coef));
+        uv = OpFAdd(vec_ids.Get(2), uv,
+                    OpVectorTimesScalar(vec_ids.Get(2), proctex_noise_a, noise_coef));
         uv = OpFAbs(vec_ids.Get(2), uv);
     }
 
@@ -867,8 +918,8 @@ void FragmentModule::DefineProcTexSampler() {
 
     // Combine and map
     const Id proctex_color_map_offset{GetShaderDataMember(i32_id, ConstS32(12))};
-    const Id lut_coord{AppendProcTexCombineAndMap(config.state.proctex.color_combiner,
-                                                  u, v, proctex_color_map_offset)};
+    const Id lut_coord{AppendProcTexCombineAndMap(config.state.proctex.color_combiner, u, v,
+                                                  proctex_color_map_offset)};
 
     Id final_color{};
     switch (config.state.proctex.lut_filter) {
@@ -906,7 +957,8 @@ void FragmentModule::DefineProcTexSampler() {
 
 Id FragmentModule::Byteround(Id variable_id, u32 size) {
     if (size > 1) {
-        const Id scaled_vec_id{OpVectorTimesScalar(vec_ids.Get(size), variable_id, ConstF32(255.f))};
+        const Id scaled_vec_id{
+            OpVectorTimesScalar(vec_ids.Get(size), variable_id, ConstF32(255.f))};
         const Id rounded_id{OpRound(vec_ids.Get(size), scaled_vec_id)};
         return OpVectorTimesScalar(vec_ids.Get(size), rounded_id, ConstF32(1.f / 255.f));
     } else {
@@ -924,7 +976,8 @@ Id FragmentModule::ProcTexLookupLUT(Id offset, Id coord) {
         const Id sampled_image{TypeSampledImage(image_buffer_id)};
         texture_buffer_lut_rg = OpLoad(sampled_image, texture_buffer_lut_rg_id);
     }
-    const Id entry{OpImageFetch(vec_ids.Get(4), OpImage(image_buffer_id, texture_buffer_lut_rg), p)};
+    const Id entry{
+        OpImageFetch(vec_ids.Get(4), OpImage(image_buffer_id, texture_buffer_lut_rg), p)};
     const Id entry_r{OpCompositeExtract(f32_id, entry, 0)};
     const Id entry_g{OpCompositeExtract(f32_id, entry, 1)};
     return OpFClamp(f32_id, OpFma(f32_id, entry_g, index_f, entry_r), ConstF32(0.f), ConstF32(1.f));
@@ -933,7 +986,7 @@ Id FragmentModule::ProcTexLookupLUT(Id offset, Id coord) {
 Id FragmentModule::ProcTexNoiseCoef(Id x) {
     // Noise utility
     const auto ProcTexNoiseRand1D = [&](Id v) -> Id {
-        InitTableS32(noise1d_table, 0,4,10,8,4,9,7,12,5,15,13,14,11,15,2,11);
+        InitTableS32(noise1d_table, 0, 4, 10, 8, 4, 9, 7, 12, 5, 15, 13, 14, 11, 15, 2, 11);
         const Id table_ptr{TypePointer(spv::StorageClass::Function, i32_id)};
         const Id left_tmp{OpIAdd(i32_id, OpSMod(i32_id, v, ConstS32(9)), ConstS32(2))};
         const Id left{OpBitwiseAnd(i32_id, OpIMul(i32_id, left_tmp, ConstS32(3)), ConstS32(0xF))};
@@ -943,7 +996,7 @@ Id FragmentModule::ProcTexNoiseCoef(Id x) {
     };
 
     const auto ProcTexNoiseRand2D = [&](Id point) -> Id {
-        InitTableS32(noise2d_table, 10,2,15,8,0,7,4,5,5,13,2,6,13,9,3,14);
+        InitTableS32(noise2d_table, 10, 2, 15, 8, 0, 7, 4, 5, 5, 13, 2, 6, 13, 9, 3, 14);
         const Id table_ptr{TypePointer(spv::StorageClass::Function, i32_id)};
         const Id point_x{OpConvertFToS(i32_id, OpCompositeExtract(f32_id, point, 0))};
         const Id point_y{OpConvertFToS(i32_id, OpCompositeExtract(f32_id, point, 1))};
@@ -952,7 +1005,8 @@ Id FragmentModule::ProcTexNoiseCoef(Id x) {
         const Id table_value{OpLoad(i32_id, OpAccessChain(table_ptr, noise2d_table, u2))};
         Id v2{ProcTexNoiseRand1D(point_y)};
         v2 = OpIAdd(i32_id, v2, OpSelect(i32_id, cond, ConstS32(4), ConstS32(0)));
-        v2 = OpBitwiseXor(i32_id, v2, OpIMul(i32_id, OpBitwiseAnd(i32_id, u2, ConstS32(1)), ConstS32(6)));
+        v2 = OpBitwiseXor(i32_id, v2,
+                          OpIMul(i32_id, OpBitwiseAnd(i32_id, u2, ConstS32(1)), ConstS32(6)));
         v2 = OpIAdd(i32_id, v2, OpIAdd(i32_id, u2, ConstS32(10)));
         v2 = OpBitwiseAnd(i32_id, v2, ConstS32(0xF));
         v2 = OpBitwiseXor(i32_id, v2, table_value);
@@ -961,8 +1015,9 @@ Id FragmentModule::ProcTexNoiseCoef(Id x) {
 
     const Id proctex_noise_f{GetShaderDataMember(vec_ids.Get(2), ConstS32(21))};
     const Id proctex_noise_p{GetShaderDataMember(vec_ids.Get(2), ConstS32(23))};
-    const Id grid{OpFMul(vec_ids.Get(2), OpVectorTimesScalar(vec_ids.Get(2), proctex_noise_f, ConstF32(9.f)),
-                                         OpFAbs(vec_ids.Get(2), OpFAdd(vec_ids.Get(2), x, proctex_noise_p)))};
+    const Id grid{OpFMul(vec_ids.Get(2),
+                         OpVectorTimesScalar(vec_ids.Get(2), proctex_noise_f, ConstF32(9.f)),
+                         OpFAbs(vec_ids.Get(2), OpFAdd(vec_ids.Get(2), x, proctex_noise_p)))};
     const Id point{OpFloor(vec_ids.Get(2), grid)};
     const Id frac{OpFSub(vec_ids.Get(2), grid, point)};
     const Id frac_x{OpCompositeExtract(f32_id, frac, 0)};
@@ -970,13 +1025,16 @@ Id FragmentModule::ProcTexNoiseCoef(Id x) {
     const Id frac_x_y{OpFAdd(f32_id, frac_x, frac_y)};
     const Id g0{OpFMul(f32_id, ProcTexNoiseRand2D(point), frac_x_y)};
     const Id frac_x_y_min_one{OpFSub(f32_id, frac_x_y, ConstF32(1.f))};
-    const Id g1{OpFMul(f32_id, ProcTexNoiseRand2D(OpFAdd(vec_ids.Get(2), point, ConstF32(1.f, 0.f))),
-                               frac_x_y_min_one)};
-    const Id g2{OpFMul(f32_id, ProcTexNoiseRand2D(OpFAdd(vec_ids.Get(2), point, ConstF32(0.f, 1.f))),
-                               frac_x_y_min_one)};
+    const Id g1{OpFMul(f32_id,
+                       ProcTexNoiseRand2D(OpFAdd(vec_ids.Get(2), point, ConstF32(1.f, 0.f))),
+                       frac_x_y_min_one)};
+    const Id g2{OpFMul(f32_id,
+                       ProcTexNoiseRand2D(OpFAdd(vec_ids.Get(2), point, ConstF32(0.f, 1.f))),
+                       frac_x_y_min_one)};
     const Id frac_x_y_min_two{OpFSub(f32_id, frac_x_y, ConstF32(2.f))};
-    const Id g3{OpFMul(f32_id, ProcTexNoiseRand2D(OpFAdd(vec_ids.Get(2), point, ConstF32(1.f, 1.f))),
-                               frac_x_y_min_two)};
+    const Id g3{OpFMul(f32_id,
+                       ProcTexNoiseRand2D(OpFAdd(vec_ids.Get(2), point, ConstF32(1.f, 1.f))),
+                       frac_x_y_min_two)};
     const Id proctex_noise_lut_offset{GetShaderDataMember(i32_id, ConstS32(11))};
     const Id x_noise{ProcTexLookupLUT(proctex_noise_lut_offset, frac_x)};
     const Id y_noise{ProcTexLookupLUT(proctex_noise_lut_offset, frac_y)};
@@ -986,15 +1044,17 @@ Id FragmentModule::ProcTexNoiseCoef(Id x) {
 }
 
 Id FragmentModule::SampleProcTexColor(Id lut_coord, Id level) {
-    const Id lut_width{OpShiftRightArithmetic(i32_id, ConstS32(config.state.proctex.lut_width), level)};
+    const Id lut_width{
+        OpShiftRightArithmetic(i32_id, ConstS32(config.state.proctex.lut_width), level)};
     const Id lut_ptr{TypePointer(spv::StorageClass::Function, i32_id)};
     // Offsets for level 4-7 seem to be hardcoded
     InitTableS32(lut_offsets, config.state.proctex.lut_offset0, config.state.proctex.lut_offset1,
-                              config.state.proctex.lut_offset2, config.state.proctex.lut_offset3,
-                              0xF0, 0xF8, 0xFC, 0xFE);
+                 config.state.proctex.lut_offset2, config.state.proctex.lut_offset3, 0xF0, 0xF8,
+                 0xFC, 0xFE);
     const Id lut_offset{OpLoad(i32_id, OpAccessChain(lut_ptr, lut_offsets, level))};
     // For the color lut, coord=0.0 is lut[offset] and coord=1.0 is lut[offset+width-1]
-    lut_coord = OpFMul(f32_id, lut_coord, OpConvertSToF(f32_id, OpISub(i32_id, lut_width, ConstS32(1))));
+    lut_coord =
+        OpFMul(f32_id, lut_coord, OpConvertSToF(f32_id, OpISub(i32_id, lut_width, ConstS32(1))));
 
     if (!Sirit::ValidId(texture_buffer_lut_rgba)) {
         const Id sampled_image{TypeSampledImage(image_buffer_id)};
@@ -1015,7 +1075,8 @@ Id FragmentModule::SampleProcTexColor(Id lut_coord, Id level) {
         const Id p2{OpIAdd(i32_id, lut_index_i, proctex_diff_lut_offset)};
         const Id texel1{OpImageFetch(vec_ids.Get(4), lut_rgba, p1)};
         const Id texel2{OpImageFetch(vec_ids.Get(4), lut_rgba, p2)};
-        return OpFAdd(vec_ids.Get(4), texel1, OpVectorTimesScalar(vec_ids.Get(4), texel2, lut_index_f));
+        return OpFAdd(vec_ids.Get(4), texel1,
+                      OpVectorTimesScalar(vec_ids.Get(4), texel2, lut_index_f));
     }
     case ProcTexFilter::Nearest:
     case ProcTexFilter::NearestMipmapLinear:
@@ -1041,7 +1102,8 @@ Id FragmentModule::LookupLightingLUT(Id lut_index, Id index, Id delta) {
     const Id lut_index_y{OpBitwiseAnd(i32_id, lut_index, ConstS32(3))};
     const Id lut_offset{GetShaderDataMember(i32_id, ConstS32(19), lut_index_x, lut_index_y)};
     const Id coord{OpIAdd(i32_id, lut_offset, index)};
-    const Id entry{OpImageFetch(vec_ids.Get(4), OpImage(image_buffer_id, texture_buffer_lut_lf), coord)};
+    const Id entry{
+        OpImageFetch(vec_ids.Get(4), OpImage(image_buffer_id, texture_buffer_lut_lf), coord)};
     const Id entry_r{OpCompositeExtract(f32_id, entry, 0)};
     const Id entry_g{OpCompositeExtract(f32_id, entry, 1)};
     return OpFma(f32_id, entry_g, delta, entry_r);
@@ -1119,9 +1181,7 @@ Id FragmentModule::AppendAlphaModifier(TevStageConfig::AlphaModifier modifier,
     const Id source_color{AppendSource(source, index)};
     const Id one_f32{ConstF32(1.f)};
 
-    const auto Component = [&](s32 c) -> Id {
-        return OpCompositeExtract(f32_id, source_color, c);
-    };
+    const auto Component = [&](s32 c) -> Id { return OpCompositeExtract(f32_id, source_color, c); };
 
     switch (modifier) {
     case AlphaModifier::SourceAlpha:
@@ -1164,7 +1224,8 @@ Id FragmentModule::AppendColorCombiner(Pica::TexturingRegs::TevStageConfig::Oper
         color = OpFAdd(vec_ids.Get(3), color_results_1, color_results_2);
         break;
     case Operation::AddSigned:
-        color = OpFSub(vec_ids.Get(3), OpFAdd(vec_ids.Get(3), color_results_1, color_results_2), half_vec);
+        color = OpFSub(vec_ids.Get(3), OpFAdd(vec_ids.Get(3), color_results_1, color_results_2),
+                       half_vec);
         break;
     case Operation::Lerp:
         color = OpFMix(vec_ids.Get(3), color_results_2, color_results_1, color_results_3);
@@ -1176,13 +1237,14 @@ Id FragmentModule::AppendColorCombiner(Pica::TexturingRegs::TevStageConfig::Oper
         color = OpFma(vec_ids.Get(3), color_results_1, color_results_2, color_results_3);
         break;
     case Operation::AddThenMultiply:
-        color = OpFMin(vec_ids.Get(3), OpFAdd(vec_ids.Get(3), color_results_1, color_results_2), one_vec);
+        color = OpFMin(vec_ids.Get(3), OpFAdd(vec_ids.Get(3), color_results_1, color_results_2),
+                       one_vec);
         color = OpFMul(vec_ids.Get(3), color, color_results_3);
         break;
     case Operation::Dot3_RGB:
     case Operation::Dot3_RGBA:
         color = OpDot(f32_id, OpFSub(vec_ids.Get(3), color_results_1, half_vec),
-                              OpFSub(vec_ids.Get(3), color_results_2, half_vec));
+                      OpFSub(vec_ids.Get(3), color_results_2, half_vec));
         color = OpFMul(f32_id, color, ConstF32(4.f));
         color = OpCompositeConstruct(vec_ids.Get(3), color, color, color);
         break;
@@ -1267,23 +1329,24 @@ void FragmentModule::DefineEntryPoint() {
 }
 
 void FragmentModule::DefineUniformStructs() {
-    const Id light_src_struct_id{TypeStruct(vec_ids.Get(3), vec_ids.Get(3), vec_ids.Get(3), vec_ids.Get(3),
-                                      vec_ids.Get(3), vec_ids.Get(3), f32_id, f32_id)};
+    const Id light_src_struct_id{TypeStruct(vec_ids.Get(3), vec_ids.Get(3), vec_ids.Get(3),
+                                            vec_ids.Get(3), vec_ids.Get(3), vec_ids.Get(3), f32_id,
+                                            f32_id)};
 
     const Id light_src_array_id{TypeArray(light_src_struct_id, ConstU32(NUM_LIGHTS))};
     const Id lighting_lut_array_id{TypeArray(ivec_ids.Get(4), ConstU32(NUM_LIGHTING_SAMPLERS / 4))};
     const Id const_color_array_id{TypeArray(vec_ids.Get(4), ConstU32(NUM_TEV_STAGES))};
 
-    const Id shader_data_struct_id{TypeStruct(i32_id, i32_id, f32_id, f32_id, f32_id, f32_id, i32_id,
-                                              i32_id, i32_id, i32_id, i32_id, i32_id, i32_id, i32_id, i32_id,
-                                              i32_id, f32_id, i32_id, u32_id, lighting_lut_array_id, vec_ids.Get(3),
-                                              vec_ids.Get(2), vec_ids.Get(2), vec_ids.Get(2), vec_ids.Get(3),
-                                              light_src_array_id, const_color_array_id, vec_ids.Get(4), vec_ids.Get(4))};
+    const Id shader_data_struct_id{TypeStruct(
+        i32_id, i32_id, f32_id, f32_id, f32_id, f32_id, i32_id, i32_id, i32_id, i32_id, i32_id,
+        i32_id, i32_id, i32_id, i32_id, i32_id, f32_id, i32_id, u32_id, lighting_lut_array_id,
+        vec_ids.Get(3), vec_ids.Get(2), vec_ids.Get(2), vec_ids.Get(2), vec_ids.Get(3),
+        light_src_array_id, const_color_array_id, vec_ids.Get(4), vec_ids.Get(4))};
 
     constexpr std::array light_src_offsets{0u, 16u, 32u, 48u, 64u, 80u, 92u, 96u};
-    constexpr std::array shader_data_offsets{0u, 4u, 8u, 12u, 16u, 20u, 24u, 28u, 32u, 36u, 40u, 44u, 48u,
-                                             52u, 56u, 60u, 64u, 68u, 72u, 80u, 176u, 192u, 200u, 208u,
-                                             224u, 240u, 1136u, 1232u, 1248u};
+    constexpr std::array shader_data_offsets{
+        0u,  4u,  8u,  12u, 16u, 20u,  24u,  28u,  32u,  36u,  40u,  44u,   48u,   52u,  56u,
+        60u, 64u, 68u, 72u, 80u, 176u, 192u, 200u, 208u, 224u, 240u, 1136u, 1232u, 1248u};
 
     Decorate(lighting_lut_array_id, spv::Decoration::ArrayStride, 16u);
     Decorate(light_src_array_id, spv::Decoration::ArrayStride, 112u);
@@ -1296,8 +1359,8 @@ void FragmentModule::DefineUniformStructs() {
     }
     Decorate(shader_data_struct_id, spv::Decoration::Block);
 
-    shader_data_id = AddGlobalVariable(TypePointer(spv::StorageClass::Uniform, shader_data_struct_id),
-                                       spv::StorageClass::Uniform);
+    shader_data_id = AddGlobalVariable(
+        TypePointer(spv::StorageClass::Uniform, shader_data_struct_id), spv::StorageClass::Uniform);
     Decorate(shader_data_id, spv::Decoration::DescriptorSet, 0);
     Decorate(shader_data_id, spv::Decoration::Binding, 1);
 }

@@ -1,11 +1,14 @@
-//? #version 330
+// Copyright 2022 Citra Emulator Project
+// Licensed under GPLv2 or any later version
+// Refer to the license.txt file included.
+
+//? #version 430 core
 precision mediump float;
 
-in vec2 tex_coord;
+layout(location = 0) in vec2 tex_coord;
+layout(location = 0) out float frag_color;
 
-out float frag_color;
-
-uniform sampler2D tex_input;
+layout(binding = 0) uniform sampler2D tex_input;
 
 void main() {
     vec2 t = textureLodOffset(tex_input, tex_coord, 0.0, ivec2(0, 1)).xy;

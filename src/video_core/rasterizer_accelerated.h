@@ -16,8 +16,7 @@ public:
     RasterizerAccelerated();
     virtual ~RasterizerAccelerated() = default;
 
-    void AddTriangle(const Pica::Shader::OutputVertex& v0,
-                     const Pica::Shader::OutputVertex& v1,
+    void AddTriangle(const Pica::Shader::OutputVertex& v0, const Pica::Shader::OutputVertex& v1,
                      const Pica::Shader::OutputVertex& v2) override;
 
     void UpdatePagesCachedCount(PAddr addr, u32 size, int delta) override;

@@ -11,10 +11,10 @@
 #include "common/file_util.h"
 #include "common/logging/log.h"
 #include "common/param_package.h"
+#include "common/settings.h"
 #include "core/core.h"
 #include "core/hle/service/cfg/cfg.h"
 #include "core/hle/service/service.h"
-#include "core/settings.h"
 #include "input_common/main.h"
 #include "input_common/udp/client.h"
 #include "jni/camera/ndk_camera.h"
@@ -114,7 +114,10 @@ void Config::ReadValues() {
         sdl2_config->GetString("Premium", "texture_filter_name", "none");
 
     // Renderer
-    Settings::values.use_gles = sdl2_config->GetBoolean("Renderer", "use_gles", true);
+    Settings::values.graphics_api =
+        static_cast<Settings::GraphicsAPI>(sdl2_config->GetInteger("Renderer", "graphics_api", 2));
+    Settings::values.async_command_recording =
+        sdl2_config->GetBoolean("Renderer", "async_command_recording", true);
     Settings::values.use_hw_renderer = sdl2_config->GetBoolean("Renderer", "use_hw_renderer", true);
     Settings::values.use_hw_shader = sdl2_config->GetBoolean("Renderer", "use_hw_shader", true);
     Settings::values.shaders_accurate_mul =
@@ -139,9 +142,9 @@ void Config::ReadValues() {
     Settings::values.factor_3d =
         static_cast<u8>(sdl2_config->GetInteger("Renderer", "factor_3d", 0));
     std::string default_shader = "none (builtin)";
-    if (Settings::values.render_3d == Settings::StereoRenderOption::Anaglyph)
+    if (Settings::values.render_3d.GetValue() == Settings::StereoRenderOption::Anaglyph)
         default_shader = "dubois (builtin)";
-    else if (Settings::values.render_3d == Settings::StereoRenderOption::Interlaced)
+    else if (Settings::values.render_3d.GetValue() == Settings::StereoRenderOption::Interlaced)
         default_shader = "horizontal (builtin)";
     Settings::values.pp_shader_name =
         sdl2_config->GetString("Renderer", "pp_shader_name", default_shader);
@@ -186,9 +189,9 @@ void Config::ReadValues() {
         sdl2_config->GetBoolean("Utility", "preload_textures", false);
 
     // Audio
-    Settings::values.enable_dsp_lle = sdl2_config->GetBoolean("Audio", "enable_dsp_lle", false);
-    Settings::values.enable_dsp_lle_multithread =
-        sdl2_config->GetBoolean("Audio", "enable_dsp_lle_multithread", false);
+    Settings::values.audio_emulation =
+        static_cast<Settings::AudioEmulation>(sdl2_config->GetInteger(
+            "Audio", "audio_emulation", static_cast<int>(Settings::AudioEmulation::HLE)));
     Settings::values.sink_id = sdl2_config->GetString("Audio", "output_engine", "auto");
     Settings::values.enable_audio_stretching =
         sdl2_config->GetBoolean("Audio", "enable_audio_stretching", true);
@@ -229,6 +232,10 @@ void Config::ReadValues() {
                 std::chrono::system_clock::from_time_t(std::mktime(&t)).time_since_epoch())
                 .count();
     }
+    Settings::values.plugin_loader_enabled =
+        sdl2_config->GetBoolean("System", "plugin_loader", false);
+    Settings::values.allow_plugin_loader =
+        sdl2_config->GetBoolean("System", "allow_plugin_loader", true);
 
     // Camera
     using namespace Service::CAM;

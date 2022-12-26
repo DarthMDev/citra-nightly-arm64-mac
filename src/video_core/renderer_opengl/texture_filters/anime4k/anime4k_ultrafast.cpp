@@ -32,10 +32,10 @@
 
 #include "video_core/renderer_opengl/texture_filters/anime4k/anime4k_ultrafast.h"
 
-#include "shaders/refine.frag"
-#include "shaders/tex_coord.vert"
-#include "shaders/x_gradient.frag"
-#include "shaders/y_gradient.frag"
+#include "video_core/host_shaders/texture_filtering/refine_frag.h"
+#include "video_core/host_shaders/texture_filtering/tex_coord_vert.h"
+#include "video_core/host_shaders/texture_filtering/x_gradient_frag.h"
+#include "video_core/host_shaders/texture_filtering/y_gradient_frag.h"
 
 namespace OpenGL {
 
@@ -56,9 +56,9 @@ Anime4kUltrafast::Anime4kUltrafast(u16 scale_factor) : TextureFilterBase(scale_f
     }
     state.draw.vertex_array = vao.handle;
 
-    gradient_x_program.Create(tex_coord_vert.data(), x_gradient_frag.data());
-    gradient_y_program.Create(tex_coord_vert.data(), y_gradient_frag.data());
-    refine_program.Create(tex_coord_vert.data(), refine_frag.data());
+    gradient_x_program.Create(HostShaders::TEX_COORD_VERT, HostShaders::X_GRADIENT_FRAG);
+    gradient_y_program.Create(HostShaders::TEX_COORD_VERT, HostShaders::Y_GRADIENT_FRAG);
+    refine_program.Create(HostShaders::TEX_COORD_VERT, HostShaders::REFINE_FRAG);
 
     state.draw.shader_program = gradient_y_program.handle;
     state.Apply();

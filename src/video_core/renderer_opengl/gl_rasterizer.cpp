@@ -28,10 +28,10 @@ constexpr std::size_t TEXTURE_BUFFER_SIZE = 1 * 1024 * 1024;
 RasterizerOpenGL::RasterizerOpenGL(Frontend::EmuWindow& emu_window, Driver& driver)
     : driver{driver}, runtime{driver}, res_cache{*this, runtime},
       shader_program_manager{emu_window, driver, !driver.IsOpenGLES()},
-      vertex_buffer{GL_ARRAY_BUFFER, VERTEX_BUFFER_SIZE},
-      uniform_buffer{GL_UNIFORM_BUFFER, UNIFORM_BUFFER_SIZE},
-      index_buffer{GL_ELEMENT_ARRAY_BUFFER, INDEX_BUFFER_SIZE},
-      texture_buffer{GL_TEXTURE_BUFFER, TEXTURE_BUFFER_SIZE},
+      vertex_buffer{GL_ARRAY_BUFFER, VERTEX_BUFFER_SIZE}, uniform_buffer{GL_UNIFORM_BUFFER,
+                                                                         UNIFORM_BUFFER_SIZE},
+      index_buffer{GL_ELEMENT_ARRAY_BUFFER, INDEX_BUFFER_SIZE}, texture_buffer{GL_TEXTURE_BUFFER,
+                                                                               TEXTURE_BUFFER_SIZE},
       texture_lf_buffer{GL_TEXTURE_BUFFER, TEXTURE_BUFFER_SIZE} {
 
     // Clipping plane 0 is always enabled for PICA fixed clip plane z <= 0
@@ -268,8 +268,7 @@ void RasterizerOpenGL::SetupVertexArray(u8* array_ptr, GLintptr buffer_offset,
 MICROPROFILE_DEFINE(OpenGL_VS, "OpenGL", "Vertex Shader Setup", MP_RGB(192, 128, 128));
 bool RasterizerOpenGL::SetupVertexShader() {
     MICROPROFILE_SCOPE(OpenGL_VS);
-    return shader_program_manager.UseProgrammableVertexShader(Pica::g_state.regs,
-                                                               Pica::g_state.vs);
+    return shader_program_manager.UseProgrammableVertexShader(Pica::g_state.regs, Pica::g_state.vs);
 }
 
 MICROPROFILE_DEFINE(OpenGL_GS, "OpenGL", "Geometry Shader Setup", MP_RGB(128, 192, 128));

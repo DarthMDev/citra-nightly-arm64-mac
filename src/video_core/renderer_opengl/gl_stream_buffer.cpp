@@ -12,7 +12,8 @@ MICROPROFILE_DEFINE(OpenGL_StreamBuffer, "OpenGL", "Stream Buffer Orphaning",
 
 namespace OpenGL {
 
-OGLStreamBuffer::OGLStreamBuffer(GLenum target, GLsizeiptr size, bool readback, bool prefer_coherent)
+OGLStreamBuffer::OGLStreamBuffer(GLenum target, GLsizeiptr size, bool readback,
+                                 bool prefer_coherent)
     : gl_target(target), buffer_size(size) {
     gl_buffer.Create();
     glBindBuffer(gl_target, gl_buffer.handle);
@@ -20,11 +21,12 @@ OGLStreamBuffer::OGLStreamBuffer(GLenum target, GLsizeiptr size, bool readback, 
     if (GLAD_GL_ARB_buffer_storage) {
         persistent = true;
         coherent = prefer_coherent;
-        GLbitfield flags =
-            (readback ? GL_MAP_READ_BIT : GL_MAP_WRITE_BIT) | GL_MAP_PERSISTENT_BIT | (coherent ? GL_MAP_COHERENT_BIT : 0);
+        GLbitfield flags = (readback ? GL_MAP_READ_BIT : GL_MAP_WRITE_BIT) | GL_MAP_PERSISTENT_BIT |
+                           (coherent ? GL_MAP_COHERENT_BIT : 0);
         glBufferStorage(gl_target, size, nullptr, flags);
-        mapped_ptr = static_cast<u8*>(glMapBufferRange(
-            gl_target, 0, buffer_size, flags | (!coherent && !readback ? GL_MAP_FLUSH_EXPLICIT_BIT : 0)));
+        mapped_ptr = static_cast<u8*>(
+            glMapBufferRange(gl_target, 0, buffer_size,
+                             flags | (!coherent && !readback ? GL_MAP_FLUSH_EXPLICIT_BIT : 0)));
     } else {
         glBufferData(gl_target, size, nullptr, GL_STREAM_DRAW);
     }
@@ -67,8 +69,10 @@ std::tuple<u8*, GLintptr, bool> OGLStreamBuffer::Map(GLsizeiptr size, GLintptr a
 
     if (invalidate || !persistent) {
         MICROPROFILE_SCOPE(OpenGL_StreamBuffer);
-        GLbitfield flags = (readback ? GL_MAP_READ_BIT : GL_MAP_WRITE_BIT) | (persistent ? GL_MAP_PERSISTENT_BIT : 0) |
-                           (coherent ? GL_MAP_COHERENT_BIT : 0) | (!coherent && !readback ? GL_MAP_FLUSH_EXPLICIT_BIT : 0) |
+        GLbitfield flags = (readback ? GL_MAP_READ_BIT : GL_MAP_WRITE_BIT) |
+                           (persistent ? GL_MAP_PERSISTENT_BIT : 0) |
+                           (coherent ? GL_MAP_COHERENT_BIT : 0) |
+                           (!coherent && !readback ? GL_MAP_FLUSH_EXPLICIT_BIT : 0) |
                            (invalidate ? GL_MAP_INVALIDATE_BUFFER_BIT : GL_MAP_UNSYNCHRONIZED_BIT);
         mapped_ptr = static_cast<u8*>(
             glMapBufferRange(gl_target, buffer_pos, buffer_size - buffer_pos, flags));

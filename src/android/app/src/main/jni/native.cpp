@@ -17,6 +17,7 @@
 #include "common/microprofile.h"
 #include "common/scm_rev.h"
 #include "common/scope_exit.h"
+#include "common/settings.h"
 #include "common/string_util.h"
 #include "core/core.h"
 #include "core/frontend/applets/default_applets.h"
@@ -25,7 +26,6 @@
 #include "core/hle/service/am/am.h"
 #include "core/hle/service/nfc/nfc.h"
 #include "core/savestate.h"
-#include "core/settings.h"
 #include "jni/android_common/android_common.h"
 #include "jni/applets/mii_selector.h"
 #include "jni/applets/swkbd.h"
@@ -237,7 +237,7 @@ static Core::System::ResultStatus RunCitra(const std::string& filepath) {
             }
         } else {
             // Ensure no audio bleeds out while game is paused
-            const float volume = Settings::values.volume;
+            const float volume = Settings::values.volume.GetValue();
             SCOPE_EXIT({ Settings::values.volume = volume; });
             Settings::values.volume = 0;
 

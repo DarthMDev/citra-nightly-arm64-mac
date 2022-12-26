@@ -1,14 +1,25 @@
-//? #version 330
+// Copyright 2022 Citra Emulator Project
+// Licensed under GPLv2 or any later version
+// Refer to the license.txt file included.
+
+//? #version 430 core
 precision mediump float;
 
-in vec2 tex_coord;
-in vec2 source_size;
-in vec2 output_size;
+layout(location = 0) in vec2 tex_coord;
+layout(location = 1) in vec2 source_size;
+layout(location = 2) in vec2 output_size;
 
-out vec4 frag_color;
+layout(location = 0) out vec4 frag_color;
 
-uniform sampler2D tex;
+layout(binding = 0) uniform sampler2D tex;
+
+#ifdef VULKAN
+layout(push_constant, std140) uniform XbrzInfo {
+    lowp float scale;
+};
+#else
 uniform lowp float scale;
+#endif
 
 const int BLEND_NONE = 0;
 const int BLEND_NORMAL = 1;

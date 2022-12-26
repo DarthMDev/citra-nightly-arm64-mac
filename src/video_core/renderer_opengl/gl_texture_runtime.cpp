@@ -57,9 +57,11 @@ constexpr u32 UPLOAD_BUFFER_SIZE = 32 * 1024 * 1024;
 constexpr u32 DOWNLOAD_BUFFER_SIZE = 32 * 1024 * 1024;
 
 TextureRuntime::TextureRuntime(Driver& driver)
-    : driver{driver}, filterer{Settings::values.texture_filter_name, VideoCore::GetResolutionScaleFactor()},
-      downloader_es{false}, upload_buffer{GL_PIXEL_UNPACK_BUFFER, UPLOAD_BUFFER_SIZE},
-      download_buffer{GL_PIXEL_PACK_BUFFER, DOWNLOAD_BUFFER_SIZE, true}  {
+    : driver{driver}, filterer{Settings::values.texture_filter_name.GetValue(),
+                               VideoCore::GetResolutionScaleFactor()},
+      upload_buffer{GL_PIXEL_UNPACK_BUFFER, UPLOAD_BUFFER_SIZE}, download_buffer{
+                                                                     GL_PIXEL_PACK_BUFFER,
+                                                                     DOWNLOAD_BUFFER_SIZE, true} {
 
     read_fbo.Create();
     draw_fbo.Create();
@@ -394,8 +396,7 @@ void Surface::Download(const VideoCore::BufferTextureCopy& download, const Stagi
         const auto& tuple = runtime.GetFormatTuple(pixel_format);
         glReadPixels(download.texture_rect.left, download.texture_rect.bottom,
                      download.texture_rect.GetWidth(), download.texture_rect.GetHeight(),
-                     tuple.format, tuple.type,
-                     reinterpret_cast<void*>(staging.buffer_offset));
+                     tuple.format, tuple.type, reinterpret_cast<void*>(staging.buffer_offset));
 
         runtime.download_buffer.Unmap(staging.size);
     }
@@ -403,8 +404,7 @@ void Surface::Download(const VideoCore::BufferTextureCopy& download, const Stagi
     glPixelStorei(GL_PACK_ROW_LENGTH, 0);
 }
 
-void Surface::ScaledUpload(const VideoCore::BufferTextureCopy& upload,
-                           const StagingData& staging) {
+void Surface::ScaledUpload(const VideoCore::BufferTextureCopy& upload, const StagingData& staging) {
     const u32 rect_width = upload.texture_rect.GetWidth();
     const u32 rect_height = upload.texture_rect.GetHeight();
     const auto scaled_rect = upload.texture_rect * res_scale;
@@ -437,7 +437,8 @@ void Surface::ScaledUpload(const VideoCore::BufferTextureCopy& upload,
     }
 }
 
-void Surface::ScaledDownload(const VideoCore::BufferTextureCopy& download, const StagingData& staging) {
+void Surface::ScaledDownload(const VideoCore::BufferTextureCopy& download,
+                             const StagingData& staging) {
     const u32 rect_width = download.texture_rect.GetWidth();
     const u32 rect_height = download.texture_rect.GetHeight();
     const VideoCore::Rect2D scaled_rect = download.texture_rect * res_scale;
@@ -466,9 +467,10 @@ void Surface::ScaledDownload(const VideoCore::BufferTextureCopy& download, const
 
     const auto& tuple = runtime.GetFormatTuple(pixel_format);
     if (driver.IsOpenGLES()) {
-        const auto& downloader_es = runtime.GetDownloaderES();
-        downloader_es.GetTexImage(GL_TEXTURE_2D, 0, tuple.format, tuple.type, rect_height, rect_width,
-                                  reinterpret_cast<void*>(staging.buffer_offset));
+        runtime.BindFramebuffer(GL_READ_FRAMEBUFFER, 0, GL_TEXTURE_2D, type,
+                                unscaled_surface.texture);
+        glReadPixels(0, 0, rect_width, rect_height, tuple.format, tuple.type,
+                     reinterpret_cast<void*>(staging.buffer_offset));
     } else {
         glGetTexImage(GL_TEXTURE_2D, 0, tuple.format, tuple.type,
                       reinterpret_cast<void*>(staging.buffer_offset));

@@ -27,6 +27,7 @@ struct RenderpassState {
 class RenderpassCache {
     static constexpr u32 MAX_COLOR_FORMATS = 5;
     static constexpr u32 MAX_DEPTH_FORMATS = 4;
+
 public:
     RenderpassCache(const Instance& instance, Scheduler& scheduler);
     ~RenderpassCache();

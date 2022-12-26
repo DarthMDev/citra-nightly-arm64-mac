@@ -1,22 +1,7 @@
 #!/bin/sh -ex
 brew unlink python@2 || true
 rm '/usr/local/bin/2to3' || true
-wget https://github.com/macports/macports-base/releases/download/v2.8.0/MacPorts-2.8.0-12-Monterey.pkg
-sudo installer -pkg ./MacPorts-2.8.0-12-Monterey.pkg -target /
-
-export PATH=$PATH:/opt/local/bin
-sudo port install cmake ninja ccache p7zip
-wget https://github.com/ColorsWind/FFmpeg-macOS/releases/download/n5.0.1-patch3/FFmpeg-shared-n5.0.1-OSX-universal.zip
-unzip FFmpeg-shared-n5.0.1-OSX-universal.zip -d FFmpeg-shared-n5.0.1-OSX-universal
-sudo cp -rv FFmpeg-shared-n5.0.1-OSX-universal/* /usr/local/
-# copy to /Users/runner/work/FFmpeg-macOS/FFmpeg-macOS/ffmpeg/install_universal
-mkdir -p /Users/runner/work/FFmpeg-macOS/FFmpeg-macOS/ffmpeg/install_universal
-sudo cp -rv FFmpeg-shared-n5.0.1-OSX-universal/* /Users/runner/work/FFmpeg-macOS/FFmpeg-macOS/ffmpeg/install_universal
-sudo port install openssl +universal openssl3 +universal glslang +universal moltenvk +universal vulkan-loader +universal
-# grab qt5 universal2 binaries
-wget https://github.com/MichaelGDev48/qt5.15.2-universal-binaries/releases/download/1.0/Qt-5.15.2-universal.zip 
-unzip Qt-5.15.2-universal
-chmod +x Qt-5.15.2-universal/bin/*
+brew install qt5 molten-vk glslang vulkan-loader p7zip ccache ninja || true
 pip3 install macpack
 
 export SDL_VER=2.0.16
