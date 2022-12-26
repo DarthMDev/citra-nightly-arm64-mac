@@ -29,12 +29,12 @@ $(pwd)/Qt-5.15.2-universal/bin/macdeployqt $BUNDLE_PATH -executable=$BUNDLE_EXEC
 python3 -m macpack.patcher $CITRA_STANDALONE_PATH -d "libs"
 
 # bundle MoltenVK
-VULKAN_LOADER_PATH=/usr/local
+VULKAN_LOADER_PATH=/opt/local
 MOLTENVK_PATH=/opt/local
 mkdir $BUNDLE_LIB_PATH
 cp $VULKAN_LOADER_PATH/lib/libvulkan.dylib $BUNDLE_LIB_PATH
 cp $MOLTENVK_PATH/lib/libMoltenVK.dylib $BUNDLE_LIB_PATH
-cp -r /usr/local/loader $BUNDLE_RESOURCES_PATH
+cp -r $VULKAN_LOADER_PATH/share/vulkan $BUNDLE_RESOURCES_PATH
 install_name_tool -add_rpath "@loader_path/../lib/" $BUNDLE_EXECUTABLE_PATH
 # workaround for libc++
 install_name_tool -change @loader_path/../Frameworks/libc++.1.0.dylib /usr/lib/libc++.1.dylib $BUNDLE_EXECUTABLE_PATH
