@@ -40,7 +40,6 @@ namespace Vulkan {
         return vk::PipelineStageFlagBits::eVertexInput;
     case vk::BufferUsageFlagBits::eUniformBuffer:
         return vk::PipelineStageFlagBits::eVertexShader |
-               vk::PipelineStageFlagBits::eGeometryShader |
                vk::PipelineStageFlagBits::eFragmentShader;
     case vk::BufferUsageFlagBits::eUniformTexelBuffer:
         return vk::PipelineStageFlagBits::eFragmentShader;
