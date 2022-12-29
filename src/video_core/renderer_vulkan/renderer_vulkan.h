@@ -88,6 +88,7 @@ private:
     void BuildPipelines();
     void ConfigureFramebufferTexture(TextureInfo& texture,
                                      const GPU::Regs::FramebufferConfig& framebuffer);
+    void LoadColorToActiveVkTexture(u8 color_r, u8 color_g, u8 color_b, const TextureInfo& texture);
     void ConfigureRenderPipeline();
     void PrepareRendertarget();
     void BeginRendering();

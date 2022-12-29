@@ -30,7 +30,8 @@
         android:supportsRtl="true"
         android:isGame="true"
         android:banner="@mipmap/ic_launcher"
-        android:requestLegacyExternalStorage="true">
+        android:requestLegacyExternalStorage="true"
+        android:debuggable="true">
 
         <activity
             android:name="org.citra.citra_emu.ui.main.MainActivity"

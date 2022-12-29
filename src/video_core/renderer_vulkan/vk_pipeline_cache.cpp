@@ -32,15 +32,32 @@ u32 AttribBytes(Pica::PipelineRegs::VertexAttributeFormat format, u32 size) {
 }
 
 vk::Format ToVkAttributeFormat(Pica::PipelineRegs::VertexAttributeFormat format, u32 size) {
-    constexpr std::array attribute_formats = {
-        std::array{vk::Format::eR8Sint, vk::Format::eR8G8Sint, vk::Format::eR8G8B8Sint,
-                   vk::Format::eR8G8B8A8Sint},
-        std::array{vk::Format::eR8Uint, vk::Format::eR8G8Uint, vk::Format::eR8G8B8Uint,
-                   vk::Format::eR8G8B8A8Uint},
-        std::array{vk::Format::eR16Sint, vk::Format::eR16G16Sint, vk::Format::eR16G16B16Sint,
-                   vk::Format::eR16G16B16A16Sint},
-        std::array{vk::Format::eR32Sfloat, vk::Format::eR32G32Sfloat, vk::Format::eR32G32B32Sfloat,
-                   vk::Format::eR32G32B32A32Sfloat}};
+    static constexpr std::array attribute_formats = {
+        std::array{
+            vk::Format::eR8Sint,
+            vk::Format::eR8G8Sint,
+            vk::Format::eR8G8B8Sint,
+            vk::Format::eR8G8B8A8Sint,
+        },
+        std::array{
+            vk::Format::eR8Uint,
+            vk::Format::eR8G8Uint,
+            vk::Format::eR8G8B8Uint,
+            vk::Format::eR8G8B8A8Uint,
+        },
+        std::array{
+            vk::Format::eR16Sint,
+            vk::Format::eR16G16Sint,
+            vk::Format::eR16G16B16Sint,
+            vk::Format::eR16G16B16A16Sint,
+        },
+        std::array{
+            vk::Format::eR32Sfloat,
+            vk::Format::eR32G32Sfloat,
+            vk::Format::eR32G32B32Sfloat,
+            vk::Format::eR32G32B32A32Sfloat,
+        },
+    };
 
     ASSERT(size <= 4);
     return attribute_formats[static_cast<u32>(format)][size - 1];
@@ -126,7 +143,10 @@ void PipelineCache::LoadDiskCache() {
 
     const std::string cache_file_path = fmt::format("{}{:x}{:x}.bin", GetPipelineCacheDir(),
                                                     instance.GetVendorID(), instance.GetDeviceID());
-    vk::PipelineCacheCreateInfo cache_info = {.initialDataSize = 0, .pInitialData = nullptr};
+    vk::PipelineCacheCreateInfo cache_info = {
+        .initialDataSize = 0,
+        .pInitialData = nullptr,
+    };
 
     std::vector<u8> cache_data;
     FileUtil::IOFile cache_file{cache_file_path, "r"};
@@ -206,6 +226,7 @@ bool PipelineCache::UseProgrammableVertexShader(const Pica::Regs& regs,
                                                 Pica::Shader::ShaderSetup& setup,
                                                 const VertexLayout& layout) {
     PicaVSConfig config{regs.rasterizer, regs.vs, setup};
+    config.state.use_geometry_shader = instance.UseGeometryShaders();
 
     u32 emulated_attrib_loc = MAX_VERTEX_ATTRIBUTES;
     for (u32 i = 0; i < layout.attribute_count; i++) {
@@ -243,7 +264,10 @@ void PipelineCache::UseTrivialVertexShader() {
 }
 
 void PipelineCache::UseFixedGeometryShader(const Pica::Regs& regs) {
-    return UseTrivialGeometryShader();
+    if (!instance.UseGeometryShaders()) {
+        return UseTrivialGeometryShader();
+    }
+
     const PicaFixedGSConfig gs_config{regs};
     const vk::ShaderModule handle =
         fixed_geometry_shaders.Get(gs_config, vk::ShaderStageFlagBits::eGeometry,
@@ -285,29 +309,46 @@ void PipelineCache::UseFragmentShader(const Pica::Regs& regs) {
 
 void PipelineCache::BindTexture(u32 binding, vk::ImageView image_view) {
     const vk::DescriptorImageInfo image_info = {
-        .imageView = image_view, .imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal};
+        .imageView = image_view,
+        .imageLayout = vk::ImageLayout::eGeneral,
+    };
     desc_manager.SetBinding(1, binding, DescriptorData{image_info});
 }
 
 void PipelineCache::BindStorageImage(u32 binding, vk::ImageView image_view) {
-    const vk::DescriptorImageInfo image_info = {.imageView = image_view,
-                                                .imageLayout = vk::ImageLayout::eGeneral};
+    const vk::DescriptorImageInfo image_info = {
+        .imageView = image_view,
+        .imageLayout = vk::ImageLayout::eGeneral,
+    };
     desc_manager.SetBinding(3, binding, DescriptorData{image_info});
 }
 
 void PipelineCache::BindBuffer(u32 binding, vk::Buffer buffer, u32 offset, u32 size) {
     const DescriptorData data = {
-        .buffer_info = vk::DescriptorBufferInfo{.buffer = buffer, .offset = offset, .range = size}};
+        .buffer_info =
+            vk::DescriptorBufferInfo{
+                .buffer = buffer,
+                .offset = offset,
+                .range = size,
+            },
+    };
     desc_manager.SetBinding(0, binding, data);
 }
 
 void PipelineCache::BindTexelBuffer(u32 binding, vk::BufferView buffer_view) {
-    const DescriptorData data = {.buffer_view = buffer_view};
+    const DescriptorData data = {
+        .buffer_view = buffer_view,
+    };
     desc_manager.SetBinding(0, binding, data);
 }
 
 void PipelineCache::BindSampler(u32 binding, vk::Sampler sampler) {
-    const DescriptorData data = {.image_info = vk::DescriptorImageInfo{.sampler = sampler}};
+    const DescriptorData data = {
+        .image_info =
+            vk::DescriptorImageInfo{
+                .sampler = sampler,
+            },
+    };
     desc_manager.SetBinding(2, binding, data);
 }
 
@@ -407,18 +448,21 @@ void PipelineCache::ApplyDynamic(const PipelineInfo& info) {
 }
 
 vk::Pipeline PipelineCache::BuildPipeline(const PipelineInfo& info) {
-    vk::Device device = instance.GetDevice();
+    const vk::Device device = instance.GetDevice();
 
     u32 shader_count = 0;
     std::array<vk::PipelineShaderStageCreateInfo, MAX_SHADER_STAGES> shader_stages;
     for (std::size_t i = 0; i < current_shaders.size(); i++) {
-        vk::ShaderModule shader = current_shaders[i];
+        const vk::ShaderModule shader = current_shaders[i];
         if (!shader) {
             continue;
         }
 
         shader_stages[shader_count++] = vk::PipelineShaderStageCreateInfo{
-            .stage = ToVkShaderStage(i), .module = shader, .pName = "main"};
+            .stage = ToVkShaderStage(i),
+            .module = shader,
+            .pName = "main",
+        };
     }
 
     /**
@@ -434,7 +478,8 @@ vk::Pipeline PipelineCache::BuildPipeline(const PipelineInfo& info) {
             .binding = binding.binding,
             .stride = binding.stride,
             .inputRate = binding.fixed.Value() ? vk::VertexInputRate::eInstance
-                                               : vk::VertexInputRate::eVertex};
+                                               : vk::VertexInputRate::eVertex,
+        };
     }
 
     u32 emulated_attrib_count = 0;
@@ -449,7 +494,8 @@ vk::Pipeline PipelineCache::BuildPipeline(const PipelineInfo& info) {
             .location = attrib.location,
             .binding = attrib.binding,
             .format = is_supported ? format : ToVkAttributeFormat(attrib.type, 2),
-            .offset = attrib.offset};
+            .offset = attrib.offset,
+        };
 
         // When the requested 3-component vertex format is unsupported by the hardware
         // is it emulated by breaking it into a vec2 + vec1. These are combined to a vec3
@@ -462,7 +508,8 @@ vk::Pipeline PipelineCache::BuildPipeline(const PipelineInfo& info) {
                 .location = location,
                 .binding = attrib.binding,
                 .format = ToVkAttributeFormat(attrib.type, 1),
-                .offset = attrib.offset + AttribBytes(attrib.type, 2)};
+                .offset = attrib.offset + AttribBytes(attrib.type, 2),
+            };
         }
     }
 
@@ -471,11 +518,13 @@ vk::Pipeline PipelineCache::BuildPipeline(const PipelineInfo& info) {
         .pVertexBindingDescriptions = bindings.data(),
         .vertexAttributeDescriptionCount =
             info.vertex_layout.attribute_count + emulated_attrib_count,
-        .pVertexAttributeDescriptions = attributes.data()};
+        .pVertexAttributeDescriptions = attributes.data(),
+    };
 
     const vk::PipelineInputAssemblyStateCreateInfo input_assembly = {
         .topology = PicaToVK::PrimitiveTopology(info.rasterization.topology),
-        .primitiveRestartEnable = false};
+        .primitiveRestartEnable = false,
+    };
 
     const vk::PipelineRasterizationStateCreateInfo raster_state = {
         .depthClampEnable = false,
@@ -483,10 +532,13 @@ vk::Pipeline PipelineCache::BuildPipeline(const PipelineInfo& info) {
         .cullMode = PicaToVK::CullMode(info.rasterization.cull_mode),
         .frontFace = PicaToVK::FrontFace(info.rasterization.cull_mode),
         .depthBiasEnable = false,
-        .lineWidth = 1.0f};
+        .lineWidth = 1.0f,
+    };
 
     const vk::PipelineMultisampleStateCreateInfo multisampling = {
-        .rasterizationSamples = vk::SampleCountFlagBits::e1, .sampleShadingEnable = false};
+        .rasterizationSamples = vk::SampleCountFlagBits::e1,
+        .sampleShadingEnable = false,
+    };
 
     const vk::PipelineColorBlendAttachmentState colorblend_attachment = {
         .blendEnable = info.blending.blend_enable.Value(),
@@ -496,19 +548,30 @@ vk::Pipeline PipelineCache::BuildPipeline(const PipelineInfo& info) {
         .srcAlphaBlendFactor = PicaToVK::BlendFunc(info.blending.src_alpha_blend_factor),
         .dstAlphaBlendFactor = PicaToVK::BlendFunc(info.blending.dst_alpha_blend_factor),
         .alphaBlendOp = PicaToVK::BlendEquation(info.blending.alpha_blend_eq),
-        .colorWriteMask = static_cast<vk::ColorComponentFlags>(info.blending.color_write_mask)};
+        .colorWriteMask = static_cast<vk::ColorComponentFlags>(info.blending.color_write_mask),
+    };
 
     const vk::PipelineColorBlendStateCreateInfo color_blending = {
         .logicOpEnable = !info.blending.blend_enable.Value() && !instance.NeedsLogicOpEmulation(),
         .logicOp = PicaToVK::LogicOp(info.blending.logic_op.Value()),
         .attachmentCount = 1,
         .pAttachments = &colorblend_attachment,
-        .blendConstants = std::array{1.0f, 1.0f, 1.0f, 1.0f}};
+        .blendConstants = std::array{1.0f, 1.0f, 1.0f, 1.0f},
+    };
 
     const vk::Viewport viewport = {
-        .x = 0.0f, .y = 0.0f, .width = 1.0f, .height = 1.0f, .minDepth = 0.0f, .maxDepth = 1.0f};
+        .x = 0.0f,
+        .y = 0.0f,
+        .width = 1.0f,
+        .height = 1.0f,
+        .minDepth = 0.0f,
+        .maxDepth = 1.0f,
+    };
 
-    const vk::Rect2D scissor = {.offset = {0, 0}, .extent = {1, 1}};
+    const vk::Rect2D scissor = {
+        .offset = {0, 0},
+        .extent = {1, 1},
+    };
 
     const vk::PipelineViewportStateCreateInfo viewport_info = {
         .viewportCount = 1,
@@ -538,13 +601,15 @@ vk::Pipeline PipelineCache::BuildPipeline(const PipelineInfo& info) {
 
     const vk::PipelineDynamicStateCreateInfo dynamic_info = {
         .dynamicStateCount = extended_dynamic_states ? static_cast<u32>(dynamic_states.size()) : 6u,
-        .pDynamicStates = dynamic_states.data()};
+        .pDynamicStates = dynamic_states.data(),
+    };
 
     const vk::StencilOpState stencil_op_state = {
         .failOp = PicaToVK::StencilOp(info.depth_stencil.stencil_fail_op),
         .passOp = PicaToVK::StencilOp(info.depth_stencil.stencil_pass_op),
         .depthFailOp = PicaToVK::StencilOp(info.depth_stencil.stencil_depth_fail_op),
-        .compareOp = PicaToVK::CompareFunc(info.depth_stencil.stencil_compare_op)};
+        .compareOp = PicaToVK::CompareFunc(info.depth_stencil.stencil_compare_op),
+    };
 
     const vk::PipelineDepthStencilStateCreateInfo depth_info = {
         .depthTestEnable = static_cast<u32>(info.depth_stencil.depth_test_enable.Value()),
@@ -553,7 +618,8 @@ vk::Pipeline PipelineCache::BuildPipeline(const PipelineInfo& info) {
         .depthBoundsTestEnable = false,
         .stencilTestEnable = static_cast<u32>(info.depth_stencil.stencil_test_enable.Value()),
         .front = stencil_op_state,
-        .back = stencil_op_state};
+        .back = stencil_op_state,
+    };
 
     const vk::GraphicsPipelineCreateInfo pipeline_info = {
         .stageCount = shader_count,
@@ -568,7 +634,8 @@ vk::Pipeline PipelineCache::BuildPipeline(const PipelineInfo& info) {
         .pDynamicState = &dynamic_info,
         .layout = desc_manager.GetPipelineLayout(),
         .renderPass =
-            renderpass_cache.GetRenderpass(info.color_attachment, info.depth_attachment, false)};
+            renderpass_cache.GetRenderpass(info.color_attachment, info.depth_attachment, false),
+    };
 
     if (const auto result = device.createGraphicsPipeline(pipeline_cache, pipeline_info);
         result.result == vk::Result::eSuccess) {

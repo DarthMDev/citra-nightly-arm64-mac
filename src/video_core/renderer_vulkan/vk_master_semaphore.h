@@ -4,8 +4,10 @@
 #pragma once
 
 #include <atomic>
+#include <deque>
 #include <limits>
 #include <thread>
+#include <vector>
 #include "common/common_types.h"
 #include "video_core/renderer_vulkan/vk_common.h"
 

@@ -61,12 +61,12 @@ RenderpassCache::RenderpassCache(const Instance& instance, Scheduler& scheduler)
                 continue;
             }
 
-            cached_renderpasses[color][depth][0] = CreateRenderPass(
-                color_format, depth_format, vk::AttachmentLoadOp::eLoad,
-                vk::ImageLayout::eColorAttachmentOptimal, vk::ImageLayout::eColorAttachmentOptimal);
-            cached_renderpasses[color][depth][1] = CreateRenderPass(
-                color_format, depth_format, vk::AttachmentLoadOp::eClear,
-                vk::ImageLayout::eColorAttachmentOptimal, vk::ImageLayout::eColorAttachmentOptimal);
+            cached_renderpasses[color][depth][0] =
+                CreateRenderPass(color_format, depth_format, vk::AttachmentLoadOp::eLoad,
+                                 vk::ImageLayout::eGeneral, vk::ImageLayout::eGeneral);
+            cached_renderpasses[color][depth][1] =
+                CreateRenderPass(color_format, depth_format, vk::AttachmentLoadOp::eClear,
+                                 vk::ImageLayout::eGeneral, vk::ImageLayout::eGeneral);
         }
     }
 }
@@ -100,11 +100,13 @@ void RenderpassCache::EnterRenderpass(const RenderpassState& state) {
             render_cmdbuf.endRenderPass();
         }
 
-        const vk::RenderPassBeginInfo renderpass_begin_info = {.renderPass = state.renderpass,
-                                                               .framebuffer = state.framebuffer,
-                                                               .renderArea = state.render_area,
-                                                               .clearValueCount = 1,
-                                                               .pClearValues = &state.clear};
+        const vk::RenderPassBeginInfo renderpass_begin_info = {
+            .renderPass = state.renderpass,
+            .framebuffer = state.framebuffer,
+            .renderArea = state.render_area,
+            .clearValueCount = 1,
+            .pClearValues = &state.clear,
+        };
 
         render_cmdbuf.beginRenderPass(renderpass_begin_info, vk::SubpassContents::eInline);
     });
@@ -160,17 +162,20 @@ vk::RenderPass RenderpassCache::CreateRenderPass(vk::Format color, vk::Format de
     vk::AttachmentReference depth_attachment_ref{};
 
     if (color != vk::Format::eUndefined) {
-        attachments[attachment_count] =
-            vk::AttachmentDescription{.format = color,
-                                      .loadOp = load_op,
-                                      .storeOp = vk::AttachmentStoreOp::eStore,
-                                      .stencilLoadOp = vk::AttachmentLoadOp::eDontCare,
-                                      .stencilStoreOp = vk::AttachmentStoreOp::eDontCare,
-                                      .initialLayout = initial_layout,
-                                      .finalLayout = final_layout};
+        attachments[attachment_count] = vk::AttachmentDescription{
+            .format = color,
+            .loadOp = load_op,
+            .storeOp = vk::AttachmentStoreOp::eStore,
+            .stencilLoadOp = vk::AttachmentLoadOp::eDontCare,
+            .stencilStoreOp = vk::AttachmentStoreOp::eDontCare,
+            .initialLayout = initial_layout,
+            .finalLayout = final_layout,
+        };
 
         color_attachment_ref = vk::AttachmentReference{
-            .attachment = attachment_count++, .layout = vk::ImageLayout::eColorAttachmentOptimal};
+            .attachment = attachment_count++,
+            .layout = vk::ImageLayout::eGeneral,
+        };
 
         use_color = true;
     }
@@ -182,35 +187,39 @@ vk::RenderPass RenderpassCache::CreateRenderPass(vk::Format color, vk::Format de
             .storeOp = vk::AttachmentStoreOp::eStore,
             .stencilLoadOp = load_op,
             .stencilStoreOp = vk::AttachmentStoreOp::eStore,
-            .initialLayout = vk::ImageLayout::eDepthStencilAttachmentOptimal,
-            .finalLayout = vk::ImageLayout::eDepthStencilAttachmentOptimal};
+            .initialLayout = vk::ImageLayout::eGeneral,
+            .finalLayout = vk::ImageLayout::eGeneral,
+        };
 
-        depth_attachment_ref =
-            vk::AttachmentReference{.attachment = attachment_count++,
-                                    .layout = vk::ImageLayout::eDepthStencilAttachmentOptimal};
+        depth_attachment_ref = vk::AttachmentReference{
+            .attachment = attachment_count++,
+            .layout = vk::ImageLayout::eGeneral,
+        };
 
         use_depth = true;
     }
 
     // We also require only one subpass
-    const vk::SubpassDescription subpass = {.pipelineBindPoint = vk::PipelineBindPoint::eGraphics,
-                                            .inputAttachmentCount = 0,
-                                            .pInputAttachments = nullptr,
-                                            .colorAttachmentCount = use_color ? 1u : 0u,
-                                            .pColorAttachments = &color_attachment_ref,
-                                            .pResolveAttachments = 0,
-                                            .pDepthStencilAttachment =
-                                                use_depth ? &depth_attachment_ref : nullptr};
+    const vk::SubpassDescription subpass = {
+        .pipelineBindPoint = vk::PipelineBindPoint::eGraphics,
+        .inputAttachmentCount = 0,
+        .pInputAttachments = nullptr,
+        .colorAttachmentCount = use_color ? 1u : 0u,
+        .pColorAttachments = &color_attachment_ref,
+        .pResolveAttachments = 0,
+        .pDepthStencilAttachment = use_depth ? &depth_attachment_ref : nullptr,
+    };
 
-    const vk::RenderPassCreateInfo renderpass_info = {.attachmentCount = attachment_count,
-                                                      .pAttachments = attachments.data(),
-                                                      .subpassCount = 1,
-                                                      .pSubpasses = &subpass,
-                                                      .dependencyCount = 0,
-                                                      .pDependencies = nullptr};
+    const vk::RenderPassCreateInfo renderpass_info = {
+        .attachmentCount = attachment_count,
+        .pAttachments = attachments.data(),
+        .subpassCount = 1,
+        .pSubpasses = &subpass,
+        .dependencyCount = 0,
+        .pDependencies = nullptr,
+    };
 
-    // Create the renderpass
-    vk::Device device = instance.GetDevice();
+    const vk::Device device = instance.GetDevice();
     return device.createRenderPass(renderpass_info);
 }
 

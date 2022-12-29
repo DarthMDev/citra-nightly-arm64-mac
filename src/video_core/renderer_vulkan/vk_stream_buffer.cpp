@@ -40,7 +40,6 @@ namespace Vulkan {
         return vk::PipelineStageFlagBits::eVertexInput;
     case vk::BufferUsageFlagBits::eUniformBuffer:
         return vk::PipelineStageFlagBits::eVertexShader |
-               vk::PipelineStageFlagBits::eGeometryShader |
                vk::PipelineStageFlagBits::eFragmentShader;
     case vk::BufferUsageFlagBits::eUniformTexelBuffer:
         return vk::PipelineStageFlagBits::eFragmentShader;
@@ -60,9 +59,10 @@ StagingBuffer::StagingBuffer(const Instance& instance, u32 size, bool readback)
     const VmaAllocationCreateFlags flags =
         readback ? VMA_ALLOCATION_CREATE_HOST_ACCESS_RANDOM_BIT
                  : VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT;
-    const VmaAllocationCreateInfo alloc_create_info = {.flags =
-                                                           flags | VMA_ALLOCATION_CREATE_MAPPED_BIT,
-                                                       .usage = VMA_MEMORY_USAGE_AUTO_PREFER_HOST};
+    const VmaAllocationCreateInfo alloc_create_info = {
+        .flags = flags | VMA_ALLOCATION_CREATE_MAPPED_BIT,
+        .usage = VMA_MEMORY_USAGE_AUTO_PREFER_HOST,
+    };
 
     VkBuffer unsafe_buffer = VK_NULL_HANDLE;
     VkBufferCreateInfo unsafe_buffer_info = static_cast<VkBufferCreateInfo>(buffer_info);
@@ -89,11 +89,15 @@ StreamBuffer::StreamBuffer(const Instance& instance, Scheduler& scheduler, u32 s
                            bool readback)
     : instance{instance}, scheduler{scheduler}, staging{instance, size, readback}, usage{usage},
       total_size{size}, bucket_size{size / BUCKET_COUNT}, readback{readback} {
-    const vk::BufferCreateInfo buffer_info = {
-        .size = total_size, .usage = usage | vk::BufferUsageFlagBits::eTransferDst};
 
-    const VmaAllocationCreateInfo alloc_create_info = {.usage =
-                                                           VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE};
+    const vk::BufferCreateInfo buffer_info = {
+        .size = total_size,
+        .usage = usage | vk::BufferUsageFlagBits::eTransferDst,
+    };
+
+    const VmaAllocationCreateInfo alloc_create_info = {
+        .usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE,
+    };
 
     VkBuffer unsafe_buffer = VK_NULL_HANDLE;
     VkBufferCreateInfo unsafe_buffer_info = static_cast<VkBufferCreateInfo>(buffer_info);
@@ -110,7 +114,11 @@ StreamBuffer::StreamBuffer(const Instance& instance, Scheduler& scheduler, u32 s
     vk::Device device = instance.GetDevice();
     for (std::size_t i = 0; i < view_formats.size(); i++) {
         const vk::BufferViewCreateInfo view_info = {
-            .buffer = gpu_buffer, .format = view_formats[i], .offset = 0, .range = total_size};
+            .buffer = gpu_buffer,
+            .format = view_formats[i],
+            .offset = 0,
+            .range = total_size,
+        };
 
         views[i] = device.createBufferView(view_info);
     }
@@ -172,7 +180,10 @@ void StreamBuffer::Flush() {
             scheduler.Record([this, flush_start, flush_size](vk::CommandBuffer,
                                                              vk::CommandBuffer upload_cmdbuf) {
                 const vk::BufferCopy copy_region = {
-                    .srcOffset = flush_start, .dstOffset = flush_start, .size = flush_size};
+                    .srcOffset = flush_start,
+                    .dstOffset = flush_start,
+                    .size = flush_size,
+                };
 
                 upload_cmdbuf.copyBuffer(staging.buffer, gpu_buffer, copy_region);
 
@@ -183,7 +194,8 @@ void StreamBuffer::Flush() {
                     .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
                     .buffer = gpu_buffer,
                     .offset = flush_start,
-                    .size = flush_size};
+                    .size = flush_size,
+                };
 
                 upload_cmdbuf.pipelineBarrier(
                     vk::PipelineStageFlagBits::eTransfer, MakePipelineStage(usage),

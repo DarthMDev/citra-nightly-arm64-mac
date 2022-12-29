@@ -156,6 +156,9 @@ private:
     /// Internal implementation for AccelerateDrawBatch
     bool AccelerateDrawBatchInternal(bool is_indexed);
 
+    /// Setup index array for AccelerateDrawBatch
+    void SetupIndexArray();
+
     /// Setup vertex array for AccelerateDrawBatch
     void SetupVertexArray(u32 vs_input_size, u32 vs_input_index_min, u32 vs_input_index_max);
 
@@ -189,6 +192,7 @@ private:
     VertexLayout software_layout;
     std::array<u64, 16> binding_offsets{};
     std::array<bool, 16> enable_attributes{};
+    std::array<vk::Buffer, 16> vertex_buffers;
     vk::Sampler default_sampler;
     Surface null_surface;
     Surface null_storage_surface;

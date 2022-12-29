@@ -32,7 +32,7 @@
 #include "jni/camera/ndk_camera.h"
 #include "jni/camera/still_image_camera.h"
 #include "jni/config.h"
-#include "jni/emu_window/emu_window.h"
+#include "jni/emu_window/emu_window_vk.h"
 #include "jni/game_info.h"
 #include "jni/game_settings.h"
 #include "jni/id_cache.h"
@@ -48,7 +48,7 @@ namespace {
 
 ANativeWindow* s_surf;
 
-std::unique_ptr<EmuWindow_Android> window;
+std::unique_ptr<EmuWindow_Android_Vulkan> window;
 
 std::atomic<bool> stop_run{true};
 std::atomic<bool> pause_emulation{false};
@@ -146,7 +146,7 @@ static Core::System::ResultStatus RunCitra(const std::string& filepath) {
         return Core::System::ResultStatus::ErrorLoader;
     }
 
-    window = std::make_unique<EmuWindow_Android>(s_surf);
+    window = std::make_unique<EmuWindow_Android_Vulkan>(s_surf);
 
     Core::System& system{Core::System::GetInstance()};
 

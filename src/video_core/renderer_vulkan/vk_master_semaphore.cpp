@@ -7,12 +7,13 @@
 namespace Vulkan {
 
 MasterSemaphore::MasterSemaphore(const Instance& instance) : device{instance.GetDevice()} {
-    const vk::StructureChain semaphore_chain = {vk::SemaphoreCreateInfo{},
-                                                vk::SemaphoreTypeCreateInfoKHR{
-                                                    .semaphoreType = vk::SemaphoreType::eTimeline,
-                                                    .initialValue = 0,
-                                                }};
-
+    const vk::StructureChain semaphore_chain = {
+        vk::SemaphoreCreateInfo{},
+        vk::SemaphoreTypeCreateInfoKHR{
+            .semaphoreType = vk::SemaphoreType::eTimeline,
+            .initialValue = 0,
+        },
+    };
     semaphore = device.createSemaphore(semaphore_chain.get());
 }
 

@@ -114,9 +114,6 @@ public:
     void FormatConvert(const Surface& surface, bool upload, std::span<std::byte> source,
                        std::span<std::byte> dest);
 
-    /// Transitions the mip level range of the surface to new_layout
-    void Transition(ImageAlloc& alloc, vk::ImageLayout new_layout, u32 level, u32 level_count);
-
     /// Fills the rectangle of the texture with the clear value provided
     bool ClearTexture(Surface& surface, const VideoCore::TextureClear& clear,
                       VideoCore::ClearValue value);
@@ -140,7 +137,16 @@ public:
     /// Returns true if the provided pixel format needs convertion
     [[nodiscard]] bool NeedsConvertion(VideoCore::PixelFormat format) const;
 
+    /// Returns a reference to the renderpass cache
+    [[nodiscard]] RenderpassCache& GetRenderpassCache() {
+        return renderpass_cache;
+    }
+
 private:
+    /// Clears a partial texture rect using a clear rectangle
+    void ClearTextureWithRenderpass(Surface& surface, const VideoCore::TextureClear& clear,
+                                    VideoCore::ClearValue value);
+
     /// Returns the current Vulkan instance
     const Instance& GetInstance() const {
         return instance;
@@ -175,9 +181,6 @@ public:
             TextureRuntime& runtime);
     ~Surface() override;
 
-    /// Transitions the mip level range of the surface to new_layout
-    void Transition(vk::ImageLayout new_layout, u32 level, u32 level_count);
-
     /// Uploads pixel data in staging to a rectangle region of the surface texture
     void Upload(const VideoCore::BufferTextureCopy& upload, const StagingData& staging);
 
@@ -187,28 +190,35 @@ public:
     /// Returns the bpp of the internal surface format
     u32 GetInternalBytesPerPixel() const;
 
+    /// Returns the access flags indicative of the surface
+    vk::AccessFlags AccessFlags() const noexcept;
+
+    /// Returns the pipeline stage flags indicative of the surface
+    vk::PipelineStageFlags PipelineStageFlags() const noexcept;
+
     /// Returns an image view used to sample the surface from a shader
-    vk::ImageView GetImageView() const {
+    vk::ImageView GetImageView() const noexcept {
         return alloc.image_view;
     }
 
     /// Returns an image view used to create a framebuffer
-    vk::ImageView GetFramebufferView() {
+    vk::ImageView GetFramebufferView() noexcept {
+        is_framebuffer = true;
         return alloc.base_view;
     }
 
     /// Returns the depth only image view of the surface, null otherwise
-    vk::ImageView GetDepthView() const {
+    vk::ImageView GetDepthView() const noexcept {
         return alloc.depth_view;
     }
 
     /// Returns the stencil only image view of the surface, null otherwise
-    vk::ImageView GetStencilView() const {
+    vk::ImageView GetStencilView() const noexcept {
         return alloc.stencil_view;
     }
 
     /// Returns the R32 image view used for atomic load/store
-    vk::ImageView GetStorageView() const {
+    vk::ImageView GetStorageView() noexcept {
         if (!alloc.storage_view) {
             LOG_CRITICAL(Render_Vulkan,
                          "Surface with pixel format {} and internal format {} "
@@ -216,11 +226,12 @@ public:
                          VideoCore::PixelFormatAsString(pixel_format), vk::to_string(alloc.format));
             UNREACHABLE();
         }
+        is_storage = true;
         return alloc.storage_view;
     }
 
     /// Returns the internal format of the allocated texture
-    vk::Format GetInternalFormat() const {
+    vk::Format GetInternalFormat() const noexcept {
         return alloc.format;
     }
 
@@ -241,6 +252,8 @@ private:
     Scheduler& scheduler;
 
 public:
+    bool is_framebuffer{};
+    bool is_storage{};
     ImageAlloc alloc;
     FormatTraits traits;
 };

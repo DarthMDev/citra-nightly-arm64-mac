@@ -15,26 +15,57 @@ struct Bindings {
 };
 
 constexpr static std::array RASTERIZER_SETS = {
-    Bindings{// Utility set
-             .bindings = {vk::DescriptorType::eUniformBuffer, vk::DescriptorType::eUniformBuffer,
-                          vk::DescriptorType::eUniformTexelBuffer,
-                          vk::DescriptorType::eUniformTexelBuffer,
-                          vk::DescriptorType::eUniformTexelBuffer},
-             .binding_count = 5},
-    Bindings{// Texture set
-             .bindings = {vk::DescriptorType::eSampledImage, vk::DescriptorType::eSampledImage,
-                          vk::DescriptorType::eSampledImage, vk::DescriptorType::eSampledImage},
-             .binding_count = 4},
-    Bindings{// Sampler set
-             .bindings = {vk::DescriptorType::eSampler, vk::DescriptorType::eSampler,
-                          vk::DescriptorType::eSampler, vk::DescriptorType::eSampler},
-             .binding_count = 4},
-    Bindings{// Shadow set
-             .bindings = {vk::DescriptorType::eStorageImage, vk::DescriptorType::eStorageImage,
-                          vk::DescriptorType::eStorageImage, vk::DescriptorType::eStorageImage,
-                          vk::DescriptorType::eStorageImage, vk::DescriptorType::eStorageImage,
-                          vk::DescriptorType::eStorageImage},
-             .binding_count = 7}};
+    Bindings{
+        // Utility set
+        .bindings =
+            {
+                vk::DescriptorType::eUniformBuffer,
+                vk::DescriptorType::eUniformBuffer,
+                vk::DescriptorType::eUniformTexelBuffer,
+                vk::DescriptorType::eUniformTexelBuffer,
+                vk::DescriptorType::eUniformTexelBuffer,
+            },
+        .binding_count = 5,
+    },
+    Bindings{
+        // Texture set
+        .bindings =
+            {
+                vk::DescriptorType::eSampledImage,
+                vk::DescriptorType::eSampledImage,
+                vk::DescriptorType::eSampledImage,
+                vk::DescriptorType::eSampledImage,
+            },
+        .binding_count = 4,
+    },
+    Bindings{
+        // Sampler set
+        .bindings =
+            {
+                vk::DescriptorType::eSampler,
+                vk::DescriptorType::eSampler,
+                vk::DescriptorType::eSampler,
+                vk::DescriptorType::eSampler,
+            },
+        .binding_count = 4,
+    },
+    Bindings{
+        // Shadow set
+        .bindings =
+            {
+                vk::DescriptorType::eStorageImage,
+                vk::DescriptorType::eStorageImage,
+                vk::DescriptorType::eStorageImage,
+                vk::DescriptorType::eStorageImage,
+                vk::DescriptorType::eStorageImage,
+                vk::DescriptorType::eStorageImage,
+                vk::DescriptorType::eStorageImage,
+            },
+        .binding_count = 4, // TODO: Combine cube faces to a single storage image
+                            // some android devices only expose up to four storage
+                            // slots per pipeline
+    },
+};
 
 constexpr vk::ShaderStageFlags ToVkStageFlags(vk::DescriptorType type) {
     vk::ShaderStageFlags flags;
@@ -66,7 +97,7 @@ DescriptorManager::DescriptorManager(const Instance& instance, Scheduler& schedu
 }
 
 DescriptorManager::~DescriptorManager() {
-    vk::Device device = instance.GetDevice();
+    const vk::Device device = instance.GetDevice();
     device.destroyPipelineLayout(pipeline_layout);
 
     for (u32 i = 0; i < MAX_DESCRIPTOR_SETS; i++) {
@@ -89,7 +120,7 @@ void DescriptorManager::BindDescriptorSets() {
         descriptor_set_dirty.fill(true);
     }
 
-    vk::Device device = instance.GetDevice();
+    const vk::Device device = instance.GetDevice();
     std::array<vk::DescriptorSet, MAX_DESCRIPTOR_SETS> bound_sets;
     for (u32 i = 0; i < MAX_DESCRIPTOR_SETS; i++) {
         if (descriptor_set_dirty[i]) {
@@ -116,51 +147,59 @@ void DescriptorManager::BuildLayouts() {
     std::array<vk::DescriptorSetLayoutBinding, MAX_DESCRIPTORS> set_bindings;
     std::array<vk::DescriptorUpdateTemplateEntry, MAX_DESCRIPTORS> update_entries;
 
-    vk::Device device = instance.GetDevice();
+    const vk::Device device = instance.GetDevice();
     for (u32 i = 0; i < MAX_DESCRIPTOR_SETS; i++) {
         const auto& set = RASTERIZER_SETS[i];
         for (u32 j = 0; j < set.binding_count; j++) {
-            vk::DescriptorType type = set.bindings[j];
-            set_bindings[j] = vk::DescriptorSetLayoutBinding{.binding = j,
-                                                             .descriptorType = type,
-                                                             .descriptorCount = 1,
-                                                             .stageFlags = ToVkStageFlags(type)};
+            const vk::DescriptorType type = set.bindings[j];
+            set_bindings[j] = vk::DescriptorSetLayoutBinding{
+                .binding = j,
+                .descriptorType = type,
+                .descriptorCount = 1,
+                .stageFlags = ToVkStageFlags(type),
+            };
 
-            update_entries[j] =
-                vk::DescriptorUpdateTemplateEntry{.dstBinding = j,
-                                                  .dstArrayElement = 0,
-                                                  .descriptorCount = 1,
-                                                  .descriptorType = type,
-                                                  .offset = j * sizeof(DescriptorData),
-                                                  .stride = 0};
+            update_entries[j] = vk::DescriptorUpdateTemplateEntry{
+                .dstBinding = j,
+                .dstArrayElement = 0,
+                .descriptorCount = 1,
+                .descriptorType = type,
+                .offset = j * sizeof(DescriptorData),
+                .stride = 0,
+            };
         }
 
-        const vk::DescriptorSetLayoutCreateInfo layout_info = {.bindingCount = set.binding_count,
-                                                               .pBindings = set_bindings.data()};
+        const vk::DescriptorSetLayoutCreateInfo layout_info = {
+            .bindingCount = set.binding_count,
+            .pBindings = set_bindings.data(),
+        };
         descriptor_set_layouts[i] = device.createDescriptorSetLayout(layout_info);
 
         const vk::DescriptorUpdateTemplateCreateInfo template_info = {
             .descriptorUpdateEntryCount = set.binding_count,
             .pDescriptorUpdateEntries = update_entries.data(),
             .templateType = vk::DescriptorUpdateTemplateType::eDescriptorSet,
-            .descriptorSetLayout = descriptor_set_layouts[i]};
-
+            .descriptorSetLayout = descriptor_set_layouts[i],
+        };
         update_templates[i] = device.createDescriptorUpdateTemplate(template_info);
     }
 
-    const vk::PipelineLayoutCreateInfo layout_info = {.setLayoutCount = MAX_DESCRIPTOR_SETS,
-                                                      .pSetLayouts = descriptor_set_layouts.data(),
-                                                      .pushConstantRangeCount = 0,
-                                                      .pPushConstantRanges = nullptr};
-
+    const vk::PipelineLayoutCreateInfo layout_info = {
+        .setLayoutCount = MAX_DESCRIPTOR_SETS,
+        .pSetLayouts = descriptor_set_layouts.data(),
+        .pushConstantRangeCount = 0,
+        .pPushConstantRanges = nullptr,
+    };
     pipeline_layout = device.createPipelineLayout(layout_info);
 }
 
 vk::DescriptorSet DescriptorManager::AllocateSet(vk::DescriptorSetLayout layout) {
-    vk::Device device = instance.GetDevice();
-
+    const vk::Device device = instance.GetDevice();
     const vk::DescriptorSetAllocateInfo alloc_info = {
-        .descriptorPool = current_pool, .descriptorSetCount = 1, .pSetLayouts = &layout};
+        .descriptorPool = current_pool,
+        .descriptorSetCount = 1,
+        .pSetLayouts = &layout,
+    };
 
     try {
         return device.allocateDescriptorSets(alloc_info)[0];

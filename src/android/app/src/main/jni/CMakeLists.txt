@@ -19,6 +19,8 @@ add_library(citra-android SHARED
     default_ini.h
     emu_window/emu_window.cpp
     emu_window/emu_window.h
+    emu_window/emu_window_vk.cpp
+    emu_window/emu_window_vk.h
     game_info.cpp
     game_info.h
     game_settings.cpp

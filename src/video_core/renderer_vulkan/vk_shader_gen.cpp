@@ -1633,12 +1633,12 @@ void main() {
     gl_Position = vert_position;
     gl_Position.z = (gl_Position.z + gl_Position.w) / 2.0;
 
-    gl_ClipDistance[0] = -vert_position.z; // fixed PICA clipping plane z <= 0
-    if (enable_clip1) {
-        gl_ClipDistance[1] = dot(clip_coef, vert_position);
-    } else {
-        gl_ClipDistance[1] = 0;
-    }
+    //gl_ClipDistance[0] = -vert_position.z; // fixed PICA clipping plane z <= 0
+    //if (enable_clip1) {
+    //    gl_ClipDistance[1] = dot(clip_coef, vert_position);
+    //} else {
+    //    gl_ClipDistance[1] = 0;
+    //}
 }
 )";
 
@@ -1682,7 +1682,9 @@ layout (set = 0, binding = 0, std140) uniform vs_config {
 };
 
 )";
-    out += GetVertexInterfaceDeclaration(true);
+    if (!config.state.use_geometry_shader) {
+        out += GetVertexInterfaceDeclaration(true);
+    }
 
     // input attributes declaration
     for (std::size_t i = 0; i < used_regs.size(); ++i) {
@@ -1754,61 +1756,65 @@ layout (set = 0, binding = 0, std140) uniform vs_config {
     }
     out += '\n';
 
-    // output attributes declaration
-    for (u32 i = 0; i < config.state.num_outputs; ++i) {
-        out += fmt::format("vec4 vs_out_attr{};\n", i, i);
-    }
-
-    const auto semantic = [&config = config.state](VSOutputAttributes::Semantic slot_semantic) -> std::string {
-        const u32 slot = static_cast<u32>(slot_semantic);
-        const u32 attrib = config.semantic_maps[slot].attribute_index;
-        const u32 comp = config.semantic_maps[slot].component_index;
-        if (attrib < config.gs_output_attributes) {
-            return fmt::format("vs_out_attr{}.{}", attrib, "xyzw"[comp]);
+    if (config.state.use_geometry_shader) {
+        // output attributes declaration
+        for (u32 i = 0; i < config.state.num_outputs; ++i) {
+            out += fmt::format("layout(location = {0}) out vec4 vs_out_attr{0};\n", i);
         }
-        return "0.0";
-    };
+        out += "void EmitVtx() {}\n";
+    } else {
+        // output attributes declaration
+        for (u32 i = 0; i < config.state.num_outputs; ++i) {
+            out += fmt::format("vec4 vs_out_attr{};\n", i);
+        }
 
-    out += "vec4 GetVertexQuaternion() {\n";
-    out += "    return vec4(" + semantic(VSOutputAttributes::QUATERNION_X) + ", " +
-           semantic(VSOutputAttributes::QUATERNION_Y) + ", " +
-           semantic(VSOutputAttributes::QUATERNION_Z) + ", " +
-           semantic(VSOutputAttributes::QUATERNION_W) + ");\n";
-    out += "}\n\n";
+        const auto semantic =
+            [&config = config.state](VSOutputAttributes::Semantic slot_semantic) -> std::string {
+            const u32 slot = static_cast<u32>(slot_semantic);
+            const u32 attrib = config.semantic_maps[slot].attribute_index;
+            const u32 comp = config.semantic_maps[slot].component_index;
+            if (attrib < config.gs_output_attributes) {
+                return fmt::format("vs_out_attr{}.{}", attrib, "xyzw"[comp]);
+            }
+            return "0.0";
+        };
 
-    out += "void EmitVtx() {\n";
-    out += "    vec4 vtx_pos = vec4(" + semantic(VSOutputAttributes::POSITION_X) + ", " +
-           semantic(VSOutputAttributes::POSITION_Y) + ", " +
-           semantic(VSOutputAttributes::POSITION_Z) + ", " +
-           semantic(VSOutputAttributes::POSITION_W) + ");\n";
-    out += "    gl_Position = vtx_pos;\n";
-    out += "    gl_Position.z = (gl_Position.z + gl_Position.w) / 2.0;\n";
-    //out += "#if !defined(CITRA_GLES) || defined(GL_EXT_clip_cull_distance)\n";
-    //out += "    gl_ClipDistance[0] = -vtx_pos.z;\n"; // fixed PICA clipping plane z <= 0
-    //out += "    gl_ClipDistance[1] = dot(clip_coef, vtx_pos);\n";
-    //out += "#endif // !defined(CITRA_GLES) || defined(GL_EXT_clip_cull_distance)\n\n";
+        out += "vec4 GetVertexQuaternion() {\n";
+        out += "    return vec4(" + semantic(VSOutputAttributes::QUATERNION_X) + ", " +
+               semantic(VSOutputAttributes::QUATERNION_Y) + ", " +
+               semantic(VSOutputAttributes::QUATERNION_Z) + ", " +
+               semantic(VSOutputAttributes::QUATERNION_W) + ");\n";
+        out += "}\n\n";
 
-    // This is inaccurate!
-    out += "    normquat = GetVertexQuaternion();\n";
+        out += "void EmitVtx() {\n";
+        out += "    vec4 vtx_pos = vec4(" + semantic(VSOutputAttributes::POSITION_X) + ", " +
+               semantic(VSOutputAttributes::POSITION_Y) + ", " +
+               semantic(VSOutputAttributes::POSITION_Z) + ", " +
+               semantic(VSOutputAttributes::POSITION_W) + ");\n";
+        out += "    gl_Position = vtx_pos;\n";
+        out += "    gl_Position.z = (gl_Position.z + gl_Position.w) / 2.0;\n";
+        out += "    normquat = GetVertexQuaternion();\n";
 
-    out += "    vec4 vtx_color = vec4(" + semantic(VSOutputAttributes::COLOR_R) + ", " +
-           semantic(VSOutputAttributes::COLOR_G) + ", " + semantic(VSOutputAttributes::COLOR_B) +
-           ", " + semantic(VSOutputAttributes::COLOR_A) + ");\n";
-    out += "    primary_color = min(abs(vtx_color), vec4(1.0));\n\n";
+        out += "    vec4 vtx_color = vec4(" + semantic(VSOutputAttributes::COLOR_R) + ", " +
+               semantic(VSOutputAttributes::COLOR_G) + ", " +
+               semantic(VSOutputAttributes::COLOR_B) + ", " +
+               semantic(VSOutputAttributes::COLOR_A) + ");\n";
+        out += "    primary_color = min(abs(vtx_color), vec4(1.0));\n\n";
 
-    out += "    texcoord0 = vec2(" + semantic(VSOutputAttributes::TEXCOORD0_U) + ", " +
-           semantic(VSOutputAttributes::TEXCOORD0_V) + ");\n";
-    out += "    texcoord1 = vec2(" + semantic(VSOutputAttributes::TEXCOORD1_U) + ", " +
-           semantic(VSOutputAttributes::TEXCOORD1_V) + ");\n\n";
+        out += "    texcoord0 = vec2(" + semantic(VSOutputAttributes::TEXCOORD0_U) + ", " +
+               semantic(VSOutputAttributes::TEXCOORD0_V) + ");\n";
+        out += "    texcoord1 = vec2(" + semantic(VSOutputAttributes::TEXCOORD1_U) + ", " +
+               semantic(VSOutputAttributes::TEXCOORD1_V) + ");\n\n";
 
-    out += "    texcoord0_w = " + semantic(VSOutputAttributes::TEXCOORD0_W) + ";\n";
-    out += "    view = vec3(" + semantic(VSOutputAttributes::VIEW_X) + ", " +
-           semantic(VSOutputAttributes::VIEW_Y) + ", " + semantic(VSOutputAttributes::VIEW_Z) +
-           ");\n\n";
+        out += "    texcoord0_w = " + semantic(VSOutputAttributes::TEXCOORD0_W) + ";\n";
+        out += "    view = vec3(" + semantic(VSOutputAttributes::VIEW_X) + ", " +
+               semantic(VSOutputAttributes::VIEW_Y) + ", " + semantic(VSOutputAttributes::VIEW_Z) +
+               ");\n\n";
 
-    out += "    texcoord2 = vec2(" + semantic(VSOutputAttributes::TEXCOORD2_U) + ", " +
-           semantic(VSOutputAttributes::TEXCOORD2_V) + ");\n\n";
-    out += "}\n";
+        out += "    texcoord2 = vec2(" + semantic(VSOutputAttributes::TEXCOORD2_U) + ", " +
+               semantic(VSOutputAttributes::TEXCOORD2_V) + ");\n\n";
+        out += "}\n";
+    }
 
     out += "\nvoid main() {\n";
     for (u32 i = 0; i < config.state.num_outputs; ++i) {

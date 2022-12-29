@@ -2,9 +2,9 @@
 // Licensed under GPLv2 or any later version
 // Refer to the license.txt file included.
 
+#include <algorithm>
 #include "common/logging/log.h"
 #include "common/microprofile.h"
-#include "common/polyfill_ranges.h"
 #include "common/settings.h"
 #include "video_core/renderer_vulkan/vk_instance.h"
 #include "video_core/renderer_vulkan/vk_renderpass_cache.h"
@@ -66,9 +66,11 @@ void Swapchain::Create() {
         .queueFamilyIndexCount = queue_family_indices_count,
         .pQueueFamilyIndices = queue_family_indices.data(),
         .preTransform = transform,
+        .compositeAlpha = vk::CompositeAlphaFlagBitsKHR::eInherit,
         .presentMode = present_mode,
         .clipped = true,
-        .oldSwapchain = swapchain};
+        .oldSwapchain = swapchain,
+    };
 
     vk::Device device = instance.GetDevice();
     vk::SwapchainKHR new_swapchain = device.createSwapchainKHR(swapchain_info);
@@ -110,11 +112,14 @@ void Swapchain::AcquireNextImage() {
 MICROPROFILE_DEFINE(Vulkan_Present, "Vulkan", "Swapchain Present", MP_RGB(66, 185, 245));
 void Swapchain::Present() {
     scheduler.Record([this, index = image_index](vk::CommandBuffer, vk::CommandBuffer) {
-        const vk::PresentInfoKHR present_info = {.waitSemaphoreCount = 1,
-                                                 .pWaitSemaphores = &present_ready[index],
-                                                 .swapchainCount = 1,
-                                                 .pSwapchains = &swapchain,
-                                                 .pImageIndices = &index};
+        const vk::PresentInfoKHR present_info = {
+            .waitSemaphoreCount = 1,
+            .pWaitSemaphores = &present_ready[index],
+            .swapchainCount = 1,
+            .pSwapchains = &swapchain,
+            .pImageIndices = &index,
+        };
+
         MICROPROFILE_SCOPE(Vulkan_Present);
         vk::Queue present_queue = instance.GetPresentQueue();
         try {
@@ -165,8 +170,9 @@ void Swapchain::SetPresentMode() {
             instance.GetPhysicalDevice().getSurfacePresentModesKHR(surface);
 
         const auto FindMode = [&modes](vk::PresentModeKHR requested) {
-            auto it = std::ranges::find_if(
-                modes, [&requested](vk::PresentModeKHR mode) { return mode == requested; });
+            auto it =
+                std::find_if(modes.begin(), modes.end(),
+                             [&requested](vk::PresentModeKHR mode) { return mode == requested; });
 
             return it != modes.end();
         };
@@ -231,11 +237,15 @@ void Swapchain::SetupImages() {
             .image = image,
             .viewType = vk::ImageViewType::e2D,
             .format = surface_format.format,
-            .subresourceRange = {.aspectMask = vk::ImageAspectFlagBits::eColor,
-                                 .baseMipLevel = 0,
-                                 .levelCount = 1,
-                                 .baseArrayLayer = 0,
-                                 .layerCount = 1}};
+            .subresourceRange =
+                {
+                    .aspectMask = vk::ImageAspectFlagBits::eColor,
+                    .baseMipLevel = 0,
+                    .levelCount = 1,
+                    .baseArrayLayer = 0,
+                    .layerCount = 1,
+                },
+        };
 
         image_views.push_back(device.createImageView(view_info));
 
@@ -245,7 +255,8 @@ void Swapchain::SetupImages() {
             .pAttachments = &image_views.back(),
             .width = extent.width,
             .height = extent.height,
-            .layers = 1};
+            .layers = 1,
+        };
 
         framebuffers.push_back(device.createFramebuffer(framebuffer_info));
     }

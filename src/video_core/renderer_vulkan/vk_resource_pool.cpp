@@ -86,7 +86,8 @@ void CommandPool::Allocate(std::size_t begin, std::size_t end) {
     const vk::CommandPoolCreateInfo pool_create_info = {
         .flags = vk::CommandPoolCreateFlagBits::eTransient |
                  vk::CommandPoolCreateFlagBits::eResetCommandBuffer,
-        .queueFamilyIndex = instance.GetGraphicsQueueFamilyIndex()};
+        .queueFamilyIndex = instance.GetGraphicsQueueFamilyIndex(),
+    };
 
     vk::Device device = instance.GetDevice();
     pool.handle = device.createCommandPool(pool_create_info);
@@ -94,7 +95,8 @@ void CommandPool::Allocate(std::size_t begin, std::size_t end) {
     const vk::CommandBufferAllocateInfo buffer_alloc_info = {
         .commandPool = pool.handle,
         .level = vk::CommandBufferLevel::ePrimary,
-        .commandBufferCount = COMMAND_BUFFER_POOL_SIZE};
+        .commandBufferCount = COMMAND_BUFFER_POOL_SIZE,
+    };
 
     auto buffers = device.allocateCommandBuffers(buffer_alloc_info);
     std::copy(buffers.begin(), buffers.end(), pool.cmdbufs.begin());
@@ -126,17 +128,19 @@ void DescriptorPool::Allocate(std::size_t begin, std::size_t end) {
     vk::DescriptorPool& pool = pools.emplace_back();
 
     // Choose a sane pool size good for most games
-    static constexpr std::array<vk::DescriptorPoolSize, 5> pool_sizes = {
-        {{vk::DescriptorType::eUniformBuffer, 4096},
-         {vk::DescriptorType::eSampledImage, 4096},
-         {vk::DescriptorType::eSampler, 4096},
-         {vk::DescriptorType::eUniformTexelBuffer, 2048},
-         {vk::DescriptorType::eStorageImage, 1024}}};
+    static constexpr std::array<vk::DescriptorPoolSize, 5> pool_sizes = {{
+        {vk::DescriptorType::eUniformBuffer, 4096},
+        {vk::DescriptorType::eSampledImage, 4096},
+        {vk::DescriptorType::eSampler, 4096},
+        {vk::DescriptorType::eUniformTexelBuffer, 2048},
+        {vk::DescriptorType::eStorageImage, 1024},
+    }};
 
     const vk::DescriptorPoolCreateInfo descriptor_pool_info = {
         .maxSets = 8192,
         .poolSizeCount = static_cast<u32>(pool_sizes.size()),
-        .pPoolSizes = pool_sizes.data()};
+        .pPoolSizes = pool_sizes.data(),
+    };
 
     pool = instance.GetDevice().createDescriptorPool(descriptor_pool_info);
 }

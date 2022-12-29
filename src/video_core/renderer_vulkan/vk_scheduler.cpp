@@ -29,16 +29,31 @@ void Scheduler::CommandChunk::ExecuteAll(vk::CommandBuffer render_cmdbuf,
 Scheduler::Scheduler(const Instance& instance, RenderpassCache& renderpass_cache,
                      RendererVulkan& renderer)
     : instance{instance}, renderpass_cache{renderpass_cache}, renderer{renderer},
-      master_semaphore{instance}, command_pool{instance, master_semaphore},
+      master_semaphore{instance}, command_pool{instance, master_semaphore}, stop_requested{false},
       use_worker_thread{Settings::values.async_command_recording} {
     AllocateWorkerCommandBuffers();
     if (use_worker_thread) {
         AcquireNewChunk();
-        worker_thread = std::jthread([this](std::stop_token token) { WorkerThread(token); });
+        worker_thread = std::thread([this]() { WorkerThread(); });
     }
 }
 
-Scheduler::~Scheduler() = default;
+Scheduler::~Scheduler() {
+    if (!use_worker_thread) {
+        return;
+    }
+
+    stop_requested = true;
+
+    // Push a dummy chunk to unblock the thread
+    {
+        std::scoped_lock lock{work_mutex};
+        work_queue.push(std::move(chunk));
+    }
+
+    work_cv.notify_one();
+    worker_thread.join();
+}
 
 void Scheduler::Flush(vk::Semaphore signal, vk::Semaphore wait) {
     SubmitExecution(signal, wait);
@@ -65,7 +80,7 @@ void Scheduler::WaitWorker() {
 }
 
 void Scheduler::DispatchWork() {
-    if (chunk->Empty()) {
+    if (!use_worker_thread || chunk->Empty()) {
         return;
     }
 
@@ -78,7 +93,7 @@ void Scheduler::DispatchWork() {
     AcquireNewChunk();
 }
 
-void Scheduler::WorkerThread(std::stop_token stop_token) {
+void Scheduler::WorkerThread() {
     do {
         std::unique_ptr<CommandChunk> work;
         bool has_submit{false};
@@ -87,8 +102,8 @@ void Scheduler::WorkerThread(std::stop_token stop_token) {
             if (work_queue.empty()) {
                 wait_cv.notify_all();
             }
-            Common::CondvarWait(work_cv, lock, stop_token, [&] { return !work_queue.empty(); });
-            if (stop_token.stop_requested()) {
+            work_cv.wait(lock, [this] { return !work_queue.empty() || stop_requested; });
+            if (stop_requested) {
                 continue;
             }
             work = std::move(work_queue.front());
@@ -102,7 +117,7 @@ void Scheduler::WorkerThread(std::stop_token stop_token) {
         }
         std::scoped_lock reserve_lock{reserve_mutex};
         chunk_reserve.push_back(std::move(work));
-    } while (!stop_token.stop_requested());
+    } while (!stop_requested);
 }
 
 void Scheduler::AllocateWorkerCommandBuffers() {
@@ -118,26 +133,25 @@ void Scheduler::AllocateWorkerCommandBuffers() {
 
 MICROPROFILE_DEFINE(Vulkan_Submit, "Vulkan", "Submit Exectution", MP_RGB(255, 192, 255));
 void Scheduler::SubmitExecution(vk::Semaphore signal_semaphore, vk::Semaphore wait_semaphore) {
-    renderer.FlushBuffers();
+    const auto handle = master_semaphore.Handle();
     const u64 signal_value = master_semaphore.NextTick();
     state = StateFlags::AllDirty;
+    renderer.FlushBuffers();
 
     renderpass_cache.ExitRenderpass();
-    Record([signal_semaphore, wait_semaphore, signal_value, this](vk::CommandBuffer render_cmdbuf,
-                                                                  vk::CommandBuffer upload_cmdbuf) {
+    Record([signal_semaphore, wait_semaphore, handle, signal_value,
+            this](vk::CommandBuffer render_cmdbuf, vk::CommandBuffer upload_cmdbuf) {
         MICROPROFILE_SCOPE(Vulkan_Submit);
         upload_cmdbuf.end();
         render_cmdbuf.end();
 
-        const vk::Semaphore timeline_semaphore = master_semaphore.Handle();
-
         const u32 num_signal_semaphores = signal_semaphore ? 2U : 1U;
         const std::array signal_values{signal_value, u64(0)};
-        const std::array signal_semaphores{timeline_semaphore, signal_semaphore};
+        const std::array signal_semaphores{handle, signal_semaphore};
 
         const u32 num_wait_semaphores = wait_semaphore ? 2U : 1U;
         const std::array wait_values{signal_value - 1, u64(1)};
-        const std::array wait_semaphores{timeline_semaphore, wait_semaphore};
+        const std::array wait_semaphores{handle, wait_semaphore};
 
         static constexpr std::array<vk::PipelineStageFlags, 2> wait_stage_masks = {
             vk::PipelineStageFlagBits::eAllCommands,

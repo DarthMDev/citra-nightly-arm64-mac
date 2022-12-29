@@ -29,7 +29,7 @@ struct StagingBuffer {
 
 class StreamBuffer {
     static constexpr u32 MAX_BUFFER_VIEWS = 3;
-    static constexpr u32 BUCKET_COUNT = 4;
+    static constexpr u32 BUCKET_COUNT = 2;
 
 public:
     /// Staging only constructor

@@ -24,24 +24,36 @@ namespace Vulkan {
 constexpr u32 VERTEX_BUFFER_SIZE = 64 * 1024 * 1024;
 constexpr u32 INDEX_BUFFER_SIZE = 16 * 1024 * 1024;
 constexpr u32 UNIFORM_BUFFER_SIZE = 16 * 1024 * 1024;
-constexpr u32 TEXTURE_BUFFER_SIZE = 16 * 1024 * 1024;
+constexpr u32 TEXTURE_BUFFER_SIZE = 512 * 1024;
 
-constexpr std::array TEXTURE_BUFFER_LF_FORMATS = {vk::Format::eR32G32Sfloat};
+constexpr std::array TEXTURE_BUFFER_LF_FORMATS = {
+    vk::Format::eR32G32Sfloat,
+};
 
-constexpr std::array TEXTURE_BUFFER_FORMATS = {vk::Format::eR32G32Sfloat,
-                                               vk::Format::eR32G32B32A32Sfloat};
+constexpr std::array TEXTURE_BUFFER_FORMATS = {
+    vk::Format::eR32G32Sfloat,
+    vk::Format::eR32G32B32A32Sfloat,
+};
 
-constexpr VideoCore::SurfaceParams NULL_PARAMS = {.width = 1,
-                                                  .height = 1,
-                                                  .stride = 1,
-                                                  .texture_type = VideoCore::TextureType::Texture2D,
-                                                  .pixel_format = VideoCore::PixelFormat::RGBA8,
-                                                  .type = VideoCore::SurfaceType::Color};
+constexpr VideoCore::SurfaceParams NULL_PARAMS = {
+    .width = 1,
+    .height = 1,
+    .stride = 1,
+    .texture_type = VideoCore::TextureType::Texture2D,
+    .pixel_format = VideoCore::PixelFormat::RGBA8,
+    .type = VideoCore::SurfaceType::Color,
+};
 
 constexpr vk::ImageUsageFlags NULL_USAGE = vk::ImageUsageFlagBits::eSampled |
                                            vk::ImageUsageFlagBits::eTransferSrc |
                                            vk::ImageUsageFlagBits::eTransferDst;
 constexpr vk::ImageUsageFlags NULL_STORAGE_USAGE = NULL_USAGE | vk::ImageUsageFlagBits::eStorage;
+
+struct DrawParams {
+    u32 vertex_count;
+    s32 vertex_offset;
+    bool is_indexed;
+};
 
 RasterizerVulkan::RasterizerVulkan(Frontend::EmuWindow& emu_window, const Instance& instance,
                                    Scheduler& scheduler, DescriptorManager& desc_manager,
@@ -62,8 +74,7 @@ RasterizerVulkan::RasterizerVulkan(Frontend::EmuWindow& emu_window, const Instan
       texture_lf_buffer{instance, scheduler, TEXTURE_BUFFER_SIZE,
                         vk::BufferUsageFlagBits::eUniformTexelBuffer, TEXTURE_BUFFER_LF_FORMATS} {
 
-    null_surface.Transition(vk::ImageLayout::eShaderReadOnlyOptimal, 0, 1);
-    null_storage_surface.Transition(vk::ImageLayout::eGeneral, 0, 1);
+    vertex_buffers.fill(vertex_buffer.GetHandle());
 
     uniform_buffer_alignment = instance.UniformMinAlignment();
     uniform_size_aligned_vs =
@@ -80,7 +91,8 @@ RasterizerVulkan::RasterizerVulkan(Frontend::EmuWindow& emu_window, const Instan
         .min_filter = Pica::TexturingRegs::TextureConfig::TextureFilter::Linear,
         .mip_filter = Pica::TexturingRegs::TextureConfig::TextureFilter::Linear,
         .wrap_s = Pica::TexturingRegs::TextureConfig::WrapMode::ClampToBorder,
-        .wrap_t = Pica::TexturingRegs::TextureConfig::WrapMode::ClampToBorder};
+        .wrap_t = Pica::TexturingRegs::TextureConfig::WrapMode::ClampToBorder,
+    };
 
     default_sampler = CreateSampler(default_sampler_info);
 
@@ -260,11 +272,9 @@ void RasterizerVulkan::SetupVertexArray(u32 vs_input_size, u32 vs_input_index_mi
     SetupFixedAttribs();
 
     // Bind the generated bindings
-    scheduler.Record([this, layout = pipeline_info.vertex_layout, offsets = binding_offsets](
-                         vk::CommandBuffer render_cmdbuf, vk::CommandBuffer) {
-        std::array<vk::Buffer, 16> buffers;
-        buffers.fill(vertex_buffer.GetHandle());
-        render_cmdbuf.bindVertexBuffers(0, layout.binding_count, buffers.data(), offsets.data());
+    scheduler.Record([this, vertex_offsets = binding_offsets](vk::CommandBuffer render_cmdbuf,
+                                                              vk::CommandBuffer) {
+        render_cmdbuf.bindVertexBuffers(0, vertex_buffers, vertex_offsets);
     });
 }
 
@@ -376,6 +386,9 @@ bool RasterizerVulkan::AccelerateDrawBatchInternal(bool is_indexed) {
     }
 
     SetupVertexArray(vs_input_size, vs_input_index_min, vs_input_index_max);
+    if (is_indexed) {
+        SetupIndexArray();
+    }
 
     if (!SetupVertexShader()) {
         return false;
@@ -388,40 +401,51 @@ bool RasterizerVulkan::AccelerateDrawBatchInternal(bool is_indexed) {
     pipeline_info.rasterization.topology.Assign(regs.pipeline.triangle_topology);
     pipeline_cache.BindPipeline(pipeline_info);
 
-    if (is_indexed) {
-        bool index_u16 = regs.pipeline.index_array.format != 0;
-        const u32 index_buffer_size = regs.pipeline.num_vertices * (index_u16 ? 2 : 1);
+    const DrawParams params = {
+        .vertex_count = regs.pipeline.num_vertices,
+        .vertex_offset = -static_cast<s32>(vs_input_index_min),
+        .is_indexed = is_indexed,
+    };
 
-        if (index_buffer_size > INDEX_BUFFER_SIZE) {
-            LOG_WARNING(Render_Vulkan, "Too large index input size {}", index_buffer_size);
-            return false;
+    scheduler.Record([params](vk::CommandBuffer render_cmdbuf, vk::CommandBuffer) {
+        if (params.is_indexed) {
+            render_cmdbuf.drawIndexed(params.vertex_count, 1, 0, params.vertex_offset, 0);
+        } else {
+            render_cmdbuf.draw(params.vertex_count, 1, 0, 0);
         }
-
-        const u8* index_data = VideoCore::g_memory->GetPhysicalPointer(
-            regs.pipeline.vertex_attributes.GetPhysicalBaseAddress() +
-            regs.pipeline.index_array.offset);
-
-        auto [index_ptr, index_offset, _] = index_buffer.Map(index_buffer_size);
-        std::memcpy(index_ptr, index_data, index_buffer_size);
-        index_buffer.Commit(index_buffer_size);
-
-        scheduler.Record(
-            [this, offset = index_offset, index_u16, num_vertices = regs.pipeline.num_vertices,
-             vertex_offset = static_cast<s32>(vs_input_index_min)](vk::CommandBuffer render_cmdbuf,
-                                                                   vk::CommandBuffer) {
-                const vk::IndexType index_type =
-                    index_u16 ? vk::IndexType::eUint16 : vk::IndexType::eUint8EXT;
-                render_cmdbuf.bindIndexBuffer(index_buffer.GetHandle(), offset, index_type);
-                render_cmdbuf.drawIndexed(num_vertices, 1, 0, -vertex_offset, 0);
-            });
-    } else {
-        scheduler.Record([num_vertices = regs.pipeline.num_vertices](
-                             vk::CommandBuffer render_cmdbuf, vk::CommandBuffer) {
-            render_cmdbuf.draw(num_vertices, 1, 0, 0);
-        });
-    }
+    });
 
     return true;
+}
+
+void RasterizerVulkan::SetupIndexArray() {
+    const auto& regs = Pica::g_state.regs;
+
+    const bool index_u8 = regs.pipeline.index_array.format == 0;
+    const bool native_u8 = index_u8 && instance.IsIndexTypeUint8Supported();
+    const vk::IndexType index_type = native_u8 ? vk::IndexType::eUint8EXT : vk::IndexType::eUint16;
+    const u32 index_buffer_size = regs.pipeline.num_vertices * (native_u8 ? 1 : 2);
+
+    const u8* index_data = VideoCore::g_memory->GetPhysicalPointer(
+        regs.pipeline.vertex_attributes.GetPhysicalBaseAddress() +
+        regs.pipeline.index_array.offset);
+
+    auto [index_ptr, index_offset, _] = index_buffer.Map(index_buffer_size);
+    if (index_u8 && !native_u8) {
+        u16* index_ptr_u16 = reinterpret_cast<u16*>(index_ptr);
+        for (u32 i = 0; i < regs.pipeline.num_vertices; i++) {
+            index_ptr_u16[i] = index_data[i];
+        }
+    } else {
+        std::memcpy(index_ptr, index_data, index_buffer_size);
+    }
+
+    index_buffer.Commit(index_buffer_size);
+
+    scheduler.Record([this, index_offset = index_offset,
+                      index_type = index_type](vk::CommandBuffer render_cmdbuf, vk::CommandBuffer) {
+        render_cmdbuf.bindIndexBuffer(index_buffer.GetHandle(), index_offset, index_type);
+    });
 }
 
 void RasterizerVulkan::DrawTriangles() {
@@ -531,15 +555,17 @@ bool RasterizerVulkan::Draw(bool accelerate, bool is_indexed) {
         // nothing. Always sample from the base level until mipmaps for texture cubes are
         // implemented
         const bool skip_mipmap = config.type == Pica::TexturingRegs::TextureConfig::TextureCube;
-        info = SamplerInfo{.mag_filter = config.mag_filter,
-                           .min_filter = config.min_filter,
-                           .mip_filter = config.mip_filter,
-                           .wrap_s = config.wrap_s,
-                           .wrap_t = config.wrap_t,
-                           .border_color = config.border_color.raw,
-                           .lod_min = skip_mipmap ? 0.f : static_cast<float>(config.lod.min_level),
-                           .lod_max = skip_mipmap ? 0.f : static_cast<float>(config.lod.max_level),
-                           .lod_bias = static_cast<float>(config.lod.bias)};
+        info = SamplerInfo{
+            .mag_filter = config.mag_filter,
+            .min_filter = config.min_filter,
+            .mip_filter = config.mip_filter,
+            .wrap_s = config.wrap_s,
+            .wrap_t = config.wrap_t,
+            .border_color = config.border_color.raw,
+            .lod_min = skip_mipmap ? 0.f : static_cast<float>(config.lod.min_level),
+            .lod_max = skip_mipmap ? 0.f : static_cast<float>(config.lod.max_level),
+            .lod_bias = static_cast<float>(config.lod.bias),
+        };
 
         // Search the cache and bind the appropriate sampler
         if (auto it = samplers.find(info); it != samplers.end()) {
@@ -563,7 +589,6 @@ bool RasterizerVulkan::Draw(bool accelerate, bool is_indexed) {
                 case TextureType::Shadow2D: {
                     auto surface = res_cache.GetTextureSurface(texture);
                     if (surface) {
-                        surface->Transition(vk::ImageLayout::eGeneral, 0, surface->alloc.levels);
                         pipeline_cache.BindStorageImage(0, surface->GetStorageView());
                     } else {
                         pipeline_cache.BindStorageImage(0, null_storage_surface.GetImageView());
@@ -596,8 +621,6 @@ bool RasterizerVulkan::Draw(bool accelerate, bool is_indexed) {
 
                     auto surface = res_cache.GetTextureCube(config);
                     if (surface) {
-                        surface->Transition(vk::ImageLayout::eShaderReadOnlyOptimal, 0,
-                                            surface->alloc.levels);
                         pipeline_cache.BindTexture(3, surface->GetImageView());
                     } else {
                         pipeline_cache.BindTexture(3, null_surface.GetImageView());
@@ -628,12 +651,8 @@ bool RasterizerVulkan::Draw(bool accelerate, bool is_indexed) {
                         .extent = VideoCore::Extent{temp.GetScaledWidth(), temp.GetScaledHeight()}};
 
                     runtime.CopyTextures(*color_surface, temp, copy);
-                    temp.Transition(vk::ImageLayout::eShaderReadOnlyOptimal, 0, temp.alloc.levels);
-
                     pipeline_cache.BindTexture(texture_index, temp.GetImageView());
                 } else {
-                    surface->Transition(vk::ImageLayout::eShaderReadOnlyOptimal, 0,
-                                        surface->alloc.levels);
                     pipeline_cache.BindTexture(texture_index, surface->GetImageView());
                 }
 
@@ -701,28 +720,24 @@ bool RasterizerVulkan::Draw(bool accelerate, bool is_indexed) {
         .renderpass = renderpass_cache.GetRenderpass(pipeline_info.color_attachment,
                                                      pipeline_info.depth_attachment, false),
         .width = width,
-        .height = height};
+        .height = height,
+    };
 
     auto [it, new_framebuffer] = framebuffers.try_emplace(framebuffer_info, vk::Framebuffer{});
     if (new_framebuffer) {
         it->second = CreateFramebuffer(framebuffer_info);
     }
 
-    if (color_surface) {
-        color_surface->Transition(vk::ImageLayout::eColorAttachmentOptimal, 0, 1);
-    }
-
-    if (depth_surface) {
-        depth_surface->Transition(vk::ImageLayout::eDepthStencilAttachmentOptimal, 0, 1);
-    }
-
     const RenderpassState renderpass_info = {
         .renderpass = framebuffer_info.renderpass,
         .framebuffer = it->second,
-        .render_area = vk::Rect2D{.offset = {static_cast<s32>(draw_rect.left),
-                                             static_cast<s32>(draw_rect.bottom)},
-                                  .extent = {draw_rect.GetWidth(), draw_rect.GetHeight()}},
-        .clear = {}};
+        .render_area =
+            vk::Rect2D{
+                .offset = {static_cast<s32>(draw_rect.left), static_cast<s32>(draw_rect.bottom)},
+                .extent = {draw_rect.GetWidth(), draw_rect.GetHeight()},
+            },
+        .clear = {},
+    };
 
     renderpass_cache.EnterRenderpass(renderpass_info);
 
@@ -772,11 +787,11 @@ bool RasterizerVulkan::Draw(bool accelerate, bool is_indexed) {
                                    depth_surface);
     }
 
-    static int submit_threshold = 80;
+    static int submit_threshold = 50;
     submit_threshold--;
     if (!submit_threshold) {
-        submit_threshold = 80;
-        scheduler.Flush();
+        submit_threshold = 50;
+        scheduler.DispatchWork();
     }
 
     return succeeded;
@@ -1083,8 +1098,11 @@ vk::Sampler RasterizerVulkan::CreateSampler(const SamplerInfo& info) {
     const auto color = PicaToVK::ColorRGBA8(info.border_color);
     const vk::SamplerCustomBorderColorCreateInfoEXT border_color_info = {
         .customBorderColor =
-            vk::ClearColorValue{.float32 = std::array{color[0], color[1], color[2], color[3]}},
-        .format = vk::Format::eUndefined};
+            vk::ClearColorValue{
+                .float32 = std::array{color[0], color[1], color[2], color[3]},
+            },
+        .format = vk::Format::eUndefined,
+    };
 
     const vk::SamplerCreateInfo sampler_info = {
         .pNext = use_border_color ? &border_color_info : nullptr,
@@ -1094,7 +1112,7 @@ vk::Sampler RasterizerVulkan::CreateSampler(const SamplerInfo& info) {
         .addressModeU = PicaToVK::WrapMode(info.wrap_s),
         .addressModeV = PicaToVK::WrapMode(info.wrap_t),
         .mipLodBias = info.lod_bias / 256.0f,
-        .anisotropyEnable = true,
+        .anisotropyEnable = instance.IsAnisotropicFilteringSupported(),
         .maxAnisotropy = properties.limits.maxSamplerAnisotropy,
         .compareEnable = false,
         .compareOp = vk::CompareOp::eAlways,
@@ -1102,7 +1120,8 @@ vk::Sampler RasterizerVulkan::CreateSampler(const SamplerInfo& info) {
         .maxLod = info.lod_max,
         .borderColor =
             use_border_color ? vk::BorderColor::eFloatCustomEXT : vk::BorderColor::eIntOpaqueBlack,
-        .unnormalizedCoordinates = false};
+        .unnormalizedCoordinates = false,
+    };
 
     vk::Device device = instance.GetDevice();
     return device.createSampler(sampler_info);
@@ -1120,12 +1139,14 @@ vk::Framebuffer RasterizerVulkan::CreateFramebuffer(const FramebufferInfo& info)
         attachments[attachment_count++] = info.depth;
     }
 
-    const vk::FramebufferCreateInfo framebuffer_info = {.renderPass = info.renderpass,
-                                                        .attachmentCount = attachment_count,
-                                                        .pAttachments = attachments.data(),
-                                                        .width = info.width,
-                                                        .height = info.height,
-                                                        .layers = 1};
+    const vk::FramebufferCreateInfo framebuffer_info = {
+        .renderPass = info.renderpass,
+        .attachmentCount = attachment_count,
+        .pAttachments = attachments.data(),
+        .width = info.width,
+        .height = info.height,
+        .layers = 1,
+    };
 
     vk::Device device = instance.GetDevice();
     return device.createFramebuffer(framebuffer_info);

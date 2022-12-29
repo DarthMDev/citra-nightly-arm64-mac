@@ -167,27 +167,8 @@ void RendererVulkan::PrepareRendertarget() {
         LCD::Read(color_fill.raw, lcd_color_addr);
 
         if (color_fill.is_enabled) {
-            TextureInfo& texture = screen_infos[i].texture;
-            runtime.Transition(texture.alloc, vk::ImageLayout::eTransferDstOptimal, 0,
-                               texture.alloc.levels);
-
-            scheduler.Record([image = texture.alloc.image,
-                              color_fill](vk::CommandBuffer render_cmdbuf, vk::CommandBuffer) {
-                const vk::ClearColorValue clear_color = {
-                    .float32 = std::array{color_fill.color_r / 255.0f, color_fill.color_g / 255.0f,
-                                          color_fill.color_b / 255.0f, 1.0f}};
-
-                const vk::ImageSubresourceRange range = {
-                    .aspectMask = vk::ImageAspectFlagBits::eColor,
-                    .baseMipLevel = 0,
-                    .levelCount = 1,
-                    .baseArrayLayer = 0,
-                    .layerCount = 1,
-                };
-
-                render_cmdbuf.clearColorImage(image, vk::ImageLayout::eTransferDstOptimal,
-                                              clear_color, range);
-            });
+            LoadColorToActiveVkTexture(color_fill.color_r, color_fill.color_g, color_fill.color_b,
+                                       screen_infos[i].texture);
         } else {
             TextureInfo& texture = screen_infos[i].texture;
             if (texture.width != framebuffer.width || texture.height != framebuffer.height ||
@@ -217,7 +198,8 @@ void RendererVulkan::BeginRendering() {
         present_textures[i] = vk::DescriptorImageInfo{
             .imageView = info.display_texture ? info.display_texture->image_view
                                               : info.texture.alloc.image_view,
-            .imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal};
+            .imageLayout = vk::ImageLayout::eGeneral,
+        };
     }
 
     present_textures[3] = vk::DescriptorImageInfo{.sampler = present_samplers[current_sampler]};
@@ -301,7 +283,7 @@ void RendererVulkan::CompileShaders() {
             .mipmapMode = vk::SamplerMipmapMode::eLinear,
             .addressModeU = vk::SamplerAddressMode::eClampToEdge,
             .addressModeV = vk::SamplerAddressMode::eClampToEdge,
-            .anisotropyEnable = true,
+            .anisotropyEnable = instance.IsAnisotropicFilteringSupported(),
             .maxAnisotropy = properties.limits.maxSamplerAnisotropy,
             .compareEnable = false,
             .compareOp = vk::CompareOp::eAlways,
@@ -315,41 +297,53 @@ void RendererVulkan::CompileShaders() {
 
 void RendererVulkan::BuildLayouts() {
     const std::array present_layout_bindings = {
-        vk::DescriptorSetLayoutBinding{.binding = 0,
-                                       .descriptorType = vk::DescriptorType::eSampledImage,
-                                       .descriptorCount = 3,
-                                       .stageFlags = vk::ShaderStageFlagBits::eFragment},
-        vk::DescriptorSetLayoutBinding{.binding = 1,
-                                       .descriptorType = vk::DescriptorType::eSampler,
-                                       .descriptorCount = 1,
-                                       .stageFlags = vk::ShaderStageFlagBits::eFragment}};
+        vk::DescriptorSetLayoutBinding{
+            .binding = 0,
+            .descriptorType = vk::DescriptorType::eSampledImage,
+            .descriptorCount = 3,
+            .stageFlags = vk::ShaderStageFlagBits::eFragment,
+        },
+        vk::DescriptorSetLayoutBinding{
+            .binding = 1,
+            .descriptorType = vk::DescriptorType::eSampler,
+            .descriptorCount = 1,
+            .stageFlags = vk::ShaderStageFlagBits::eFragment,
+        },
+    };
 
     const vk::DescriptorSetLayoutCreateInfo present_layout_info = {
         .bindingCount = static_cast<u32>(present_layout_bindings.size()),
-        .pBindings = present_layout_bindings.data()};
+        .pBindings = present_layout_bindings.data(),
+    };
 
     vk::Device device = instance.GetDevice();
     present_descriptor_layout = device.createDescriptorSetLayout(present_layout_info);
 
     const std::array update_template_entries = {
-        vk::DescriptorUpdateTemplateEntry{.dstBinding = 0,
-                                          .dstArrayElement = 0,
-                                          .descriptorCount = 3,
-                                          .descriptorType = vk::DescriptorType::eSampledImage,
-                                          .offset = 0,
-                                          .stride = sizeof(vk::DescriptorImageInfo)},
-        vk::DescriptorUpdateTemplateEntry{.dstBinding = 1,
-                                          .dstArrayElement = 0,
-                                          .descriptorCount = 1,
-                                          .descriptorType = vk::DescriptorType::eSampler,
-                                          .offset = 3 * sizeof(vk::DescriptorImageInfo),
-                                          .stride = 0}};
+        vk::DescriptorUpdateTemplateEntry{
+            .dstBinding = 0,
+            .dstArrayElement = 0,
+            .descriptorCount = 3,
+            .descriptorType = vk::DescriptorType::eSampledImage,
+            .offset = 0,
+            .stride = sizeof(vk::DescriptorImageInfo),
+        },
+        vk::DescriptorUpdateTemplateEntry{
+            .dstBinding = 1,
+            .dstArrayElement = 0,
+            .descriptorCount = 1,
+            .descriptorType = vk::DescriptorType::eSampler,
+            .offset = 3 * sizeof(vk::DescriptorImageInfo),
+            .stride = 0,
+        },
+    };
 
     const vk::DescriptorUpdateTemplateCreateInfo template_info = {
         .descriptorUpdateEntryCount = static_cast<u32>(update_template_entries.size()),
         .pDescriptorUpdateEntries = update_template_entries.data(),
         .templateType = vk::DescriptorUpdateTemplateType::eDescriptorSet,
-        .descriptorSetLayout = present_descriptor_layout};
+        .descriptorSetLayout = present_descriptor_layout,
+    };
 
     present_update_template = device.createDescriptorUpdateTemplate(template_info);
 
@@ -359,37 +353,49 @@ void RendererVulkan::BuildLayouts() {
         .size = sizeof(PresentUniformData),
     };
 
-    const vk::PipelineLayoutCreateInfo layout_info = {.setLayoutCount = 1,
-                                                      .pSetLayouts = &present_descriptor_layout,
-                                                      .pushConstantRangeCount = 1,
-                                                      .pPushConstantRanges = &push_range};
+    const vk::PipelineLayoutCreateInfo layout_info = {
+        .setLayoutCount = 1,
+        .pSetLayouts = &present_descriptor_layout,
+        .pushConstantRangeCount = 1,
+        .pPushConstantRanges = &push_range,
+    };
 
     present_pipeline_layout = device.createPipelineLayout(layout_info);
 }
 
 void RendererVulkan::BuildPipelines() {
-    const vk::VertexInputBindingDescription binding = {.binding = 0,
-                                                       .stride = sizeof(ScreenRectVertex),
-                                                       .inputRate = vk::VertexInputRate::eVertex};
+    const vk::VertexInputBindingDescription binding = {
+        .binding = 0,
+        .stride = sizeof(ScreenRectVertex),
+        .inputRate = vk::VertexInputRate::eVertex,
+    };
 
     const std::array attributes = {
-        vk::VertexInputAttributeDescription{.location = 0,
-                                            .binding = 0,
-                                            .format = vk::Format::eR32G32Sfloat,
-                                            .offset = offsetof(ScreenRectVertex, position)},
-        vk::VertexInputAttributeDescription{.location = 1,
-                                            .binding = 0,
-                                            .format = vk::Format::eR32G32Sfloat,
-                                            .offset = offsetof(ScreenRectVertex, tex_coord)}};
+        vk::VertexInputAttributeDescription{
+            .location = 0,
+            .binding = 0,
+            .format = vk::Format::eR32G32Sfloat,
+            .offset = offsetof(ScreenRectVertex, position),
+        },
+        vk::VertexInputAttributeDescription{
+            .location = 1,
+            .binding = 0,
+            .format = vk::Format::eR32G32Sfloat,
+            .offset = offsetof(ScreenRectVertex, tex_coord),
+        },
+    };
 
     const vk::PipelineVertexInputStateCreateInfo vertex_input_info = {
         .vertexBindingDescriptionCount = 1,
         .pVertexBindingDescriptions = &binding,
         .vertexAttributeDescriptionCount = static_cast<u32>(attributes.size()),
-        .pVertexAttributeDescriptions = attributes.data()};
+        .pVertexAttributeDescriptions = attributes.data(),
+    };
 
     const vk::PipelineInputAssemblyStateCreateInfo input_assembly = {
-        .topology = vk::PrimitiveTopology::eTriangleStrip, .primitiveRestartEnable = false};
+        .topology = vk::PrimitiveTopology::eTriangleStrip,
+        .primitiveRestartEnable = false,
+    };
 
     const vk::PipelineRasterizationStateCreateInfo raster_state = {
         .depthClampEnable = false,
@@ -397,21 +403,26 @@ void RendererVulkan::BuildPipelines() {
         .cullMode = vk::CullModeFlagBits::eNone,
         .frontFace = vk::FrontFace::eClockwise,
         .depthBiasEnable = false,
-        .lineWidth = 1.0f};
+        .lineWidth = 1.0f,
+    };
 
     const vk::PipelineMultisampleStateCreateInfo multisampling = {
-        .rasterizationSamples = vk::SampleCountFlagBits::e1, .sampleShadingEnable = false};
+        .rasterizationSamples = vk::SampleCountFlagBits::e1,
+        .sampleShadingEnable = false,
+    };
 
     const vk::PipelineColorBlendAttachmentState colorblend_attachment = {
         .blendEnable = false,
         .colorWriteMask = vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG |
-                          vk::ColorComponentFlagBits::eB | vk::ColorComponentFlagBits::eA};
+                          vk::ColorComponentFlagBits::eB | vk::ColorComponentFlagBits::eA,
+    };
 
     const vk::PipelineColorBlendStateCreateInfo color_blending = {
         .logicOpEnable = false,
         .attachmentCount = 1,
         .pAttachments = &colorblend_attachment,
-        .blendConstants = std::array{1.0f, 1.0f, 1.0f, 1.0f}};
+        .blendConstants = std::array{1.0f, 1.0f, 1.0f, 1.0f},
+    };
 
     const vk::Viewport placeholder_viewport = vk::Viewport{0.0f, 0.0f, 1.0f, 1.0f, 0.0f, 1.0f};
     const vk::Rect2D placeholder_scissor = vk::Rect2D{{0, 0}, {1, 1}};
@@ -422,27 +433,36 @@ void RendererVulkan::BuildPipelines() {
         .pScissors = &placeholder_scissor,
     };
 
-    const std::array dynamic_states = {vk::DynamicState::eViewport, vk::DynamicState::eScissor};
+    const std::array dynamic_states = {
+        vk::DynamicState::eViewport,
+        vk::DynamicState::eScissor,
+    };
 
     const vk::PipelineDynamicStateCreateInfo dynamic_info = {
         .dynamicStateCount = static_cast<u32>(dynamic_states.size()),
-        .pDynamicStates = dynamic_states.data()};
+        .pDynamicStates = dynamic_states.data(),
+    };
 
-    const vk::PipelineDepthStencilStateCreateInfo depth_info = {.depthTestEnable = false,
-                                                                .depthWriteEnable = false,
-                                                                .depthCompareOp =
-                                                                    vk::CompareOp::eAlways,
-                                                                .depthBoundsTestEnable = false,
-                                                                .stencilTestEnable = false};
+    const vk::PipelineDepthStencilStateCreateInfo depth_info = {
+        .depthTestEnable = false,
+        .depthWriteEnable = false,
+        .depthCompareOp = vk::CompareOp::eAlways,
+        .depthBoundsTestEnable = false,
+        .stencilTestEnable = false,
+    };
 
     for (u32 i = 0; i < PRESENT_PIPELINES; i++) {
         const std::array shader_stages = {
-            vk::PipelineShaderStageCreateInfo{.stage = vk::ShaderStageFlagBits::eVertex,
-                                              .module = present_vertex_shader,
-                                              .pName = "main"},
-            vk::PipelineShaderStageCreateInfo{.stage = vk::ShaderStageFlagBits::eFragment,
-                                              .module = present_shaders[i],
-                                              .pName = "main"},
+            vk::PipelineShaderStageCreateInfo{
+                .stage = vk::ShaderStageFlagBits::eVertex,
+                .module = present_vertex_shader,
+                .pName = "main",
+            },
+            vk::PipelineShaderStageCreateInfo{
+                .stage = vk::ShaderStageFlagBits::eFragment,
+                .module = present_shaders[i],
+                .pName = "main",
+            },
         };
 
         const vk::GraphicsPipelineCreateInfo pipeline_info = {
@@ -457,7 +477,8 @@ void RendererVulkan::BuildPipelines() {
             .pColorBlendState = &color_blending,
             .pDynamicState = &dynamic_info,
             .layout = present_pipeline_layout,
-            .renderPass = renderpass_cache.GetPresentRenderpass()};
+            .renderPass = renderpass_cache.GetPresentRenderpass(),
+        };
 
         vk::Device device = instance.GetDevice();
         if (const auto result = device.createGraphicsPipeline({}, pipeline_info);
@@ -473,23 +494,85 @@ void RendererVulkan::BuildPipelines() {
 void RendererVulkan::ConfigureFramebufferTexture(TextureInfo& texture,
                                                  const GPU::Regs::FramebufferConfig& framebuffer) {
     TextureInfo old_texture = std::move(texture);
-    texture = TextureInfo{.alloc = runtime.Allocate(
-                              framebuffer.width, framebuffer.height,
-                              VideoCore::PixelFormatFromGPUPixelFormat(framebuffer.color_format),
-                              VideoCore::TextureType::Texture2D),
-                          .width = framebuffer.width,
-                          .height = framebuffer.height,
-                          .format = framebuffer.color_format};
+    texture = TextureInfo{
+        .alloc =
+            runtime.Allocate(framebuffer.width, framebuffer.height,
+                             VideoCore::PixelFormatFromGPUPixelFormat(framebuffer.color_format),
+                             VideoCore::TextureType::Texture2D),
+        .width = framebuffer.width,
+        .height = framebuffer.height,
+        .format = framebuffer.color_format,
+    };
 
     // Recyle the old texture after allocation to avoid having duplicates of the same allocation in
     // the recycler
     if (old_texture.width != 0 && old_texture.height != 0) {
-        const HostTextureTag tag = {.format = old_texture.alloc.format,
-                                    .width = old_texture.width,
-                                    .height = old_texture.height};
+        const HostTextureTag tag = {
+            .format = old_texture.alloc.format,
+            .width = old_texture.width,
+            .height = old_texture.height,
+        };
 
         runtime.Recycle(tag, std::move(old_texture.alloc));
     }
+}
+
+void RendererVulkan::LoadColorToActiveVkTexture(u8 color_r, u8 color_g, u8 color_b,
+                                                const TextureInfo& texture) {
+    const vk::ClearColorValue clear_color = {
+        .float32 =
+            std::array{
+                color_r / 255.0f,
+                color_g / 255.0f,
+                color_b / 255.0f,
+                1.0f,
+            },
+    };
+
+    renderpass_cache.ExitRenderpass();
+    scheduler.Record([image = texture.alloc.image, clear_color](vk::CommandBuffer render_cmdbuf,
+                                                                vk::CommandBuffer) {
+        const vk::ImageSubresourceRange range = {
+            .aspectMask = vk::ImageAspectFlagBits::eColor,
+            .baseMipLevel = 0,
+            .levelCount = VK_REMAINING_MIP_LEVELS,
+            .baseArrayLayer = 0,
+            .layerCount = VK_REMAINING_ARRAY_LAYERS,
+        };
+
+        const vk::ImageMemoryBarrier pre_barrier = {
+            .srcAccessMask = vk::AccessFlagBits::eShaderRead | vk::AccessFlagBits::eTransferRead,
+            .dstAccessMask = vk::AccessFlagBits::eTransferWrite,
+            .oldLayout = vk::ImageLayout::eGeneral,
+            .newLayout = vk::ImageLayout::eTransferDstOptimal,
+            .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+            .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+            .image = image,
+            .subresourceRange = range,
+        };
+
+        const vk::ImageMemoryBarrier post_barrier = {
+            .srcAccessMask = vk::AccessFlagBits::eTransferWrite,
+            .dstAccessMask = vk::AccessFlagBits::eShaderRead | vk::AccessFlagBits::eTransferRead,
+            .oldLayout = vk::ImageLayout::eTransferDstOptimal,
+            .newLayout = vk::ImageLayout::eGeneral,
+            .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+            .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+            .image = image,
+            .subresourceRange = range,
+        };
+
+        render_cmdbuf.pipelineBarrier(vk::PipelineStageFlagBits::eFragmentShader,
+                                      vk::PipelineStageFlagBits::eTransfer,
+                                      vk::DependencyFlagBits::eByRegion, {}, {}, pre_barrier);
+
+        render_cmdbuf.clearColorImage(image, vk::ImageLayout::eTransferDstOptimal, clear_color,
+                                      range);
+
+        render_cmdbuf.pipelineBarrier(vk::PipelineStageFlagBits::eTransfer,
+                                      vk::PipelineStageFlagBits::eFragmentShader,
+                                      vk::DependencyFlagBits::eByRegion, {}, {}, post_barrier);
+    });
 }
 
 void RendererVulkan::ReloadSampler() {
@@ -844,25 +927,23 @@ void RendererVulkan::SwapBuffers() {
     } while (swapchain.NeedsRecreation());
 
     scheduler.Record([layout](vk::CommandBuffer render_cmdbuf, vk::CommandBuffer) {
-        const vk::Viewport viewport = {.x = 0.0f,
-                                       .y = 0.0f,
-                                       .width = static_cast<float>(layout.width),
-                                       .height = static_cast<float>(layout.height),
-                                       .minDepth = 0.0f,
-                                       .maxDepth = 1.0f};
+        const vk::Viewport viewport = {
+            .x = 0.0f,
+            .y = 0.0f,
+            .width = static_cast<float>(layout.width),
+            .height = static_cast<float>(layout.height),
+            .minDepth = 0.0f,
+            .maxDepth = 1.0f,
+        };
 
-        const vk::Rect2D scissor = {.offset = {0, 0}, .extent = {layout.width, layout.height}};
+        const vk::Rect2D scissor = {
+            .offset = {0, 0},
+            .extent = {layout.width, layout.height},
+        };
 
         render_cmdbuf.setViewport(0, viewport);
         render_cmdbuf.setScissor(0, scissor);
     });
-
-    renderpass_cache.ExitRenderpass();
-
-    for (auto& info : screen_infos) {
-        ImageAlloc* alloc = info.display_texture ? info.display_texture : &info.texture.alloc;
-        runtime.Transition(*alloc, vk::ImageLayout::eShaderReadOnlyOptimal, 0, alloc->levels);
-    }
 
     DrawScreens(layout, false);
 
