@@ -7,6 +7,7 @@
 #include "core/hw/gpu.h"
 #include "video_core/rasterizer_accelerated.h"
 #include "video_core/renderer_vulkan/vk_pipeline_cache.h"
+#include "video_core/renderer_vulkan/vk_renderpass_cache.h"
 #include "video_core/renderer_vulkan/vk_stream_buffer.h"
 #include "video_core/renderer_vulkan/vk_texture_runtime.h"
 
@@ -100,9 +101,6 @@ public:
 
     /// Sync fixed function pipeline state
     void SyncFixedState();
-
-    /// Flushes all rasterizer owned buffers
-    void FlushBuffers();
 
 private:
     void NotifyFixedFunctionPicaRegisterChanged(u32 id) override;
@@ -201,16 +199,17 @@ private:
     SamplerInfo texture_cube_sampler;
     std::unordered_map<SamplerInfo, vk::Sampler> samplers;
     std::unordered_map<FramebufferInfo, vk::Framebuffer> framebuffers;
-
-    StreamBuffer vertex_buffer;
-    StreamBuffer uniform_buffer;
-    StreamBuffer index_buffer;
-    StreamBuffer texture_buffer;
-    StreamBuffer texture_lf_buffer;
     PipelineInfo pipeline_info;
-    std::size_t uniform_buffer_alignment;
-    std::size_t uniform_size_aligned_vs;
-    std::size_t uniform_size_aligned_fs;
+
+    StreamBuffer stream_buffer;     ///< Vertex+Index+Uniform buffer
+    StreamBuffer texture_buffer;    ///< Texture buffer
+    StreamBuffer texture_lf_buffer; ///< Texture Light-Fog buffer
+    vk::BufferView texture_lf_view;
+    vk::BufferView texture_rg_view;
+    vk::BufferView texture_rgba_view;
+    u64 uniform_buffer_alignment;
+    u64 uniform_size_aligned_vs;
+    u64 uniform_size_aligned_fs;
 };
 
 } // namespace Vulkan

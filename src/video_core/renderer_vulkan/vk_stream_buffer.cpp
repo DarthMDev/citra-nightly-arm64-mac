@@ -1,243 +1,155 @@
-// Copyright 2022 Citra Emulator Project
+// Copyright 2019 yuzu Emulator Project
 // Licensed under GPLv2 or any later version
 // Refer to the license.txt file included.
 
 #include <algorithm>
+#include <limits>
 #include "common/alignment.h"
 #include "common/assert.h"
-#include "common/logging/log.h"
-#include "common/microprofile.h"
 #include "video_core/renderer_vulkan/vk_instance.h"
 #include "video_core/renderer_vulkan/vk_scheduler.h"
 #include "video_core/renderer_vulkan/vk_stream_buffer.h"
 
-#include <vk_mem_alloc.h>
-
 namespace Vulkan {
 
-[[nodiscard]] vk::AccessFlags MakeAccessFlags(vk::BufferUsageFlagBits usage) {
-    switch (usage) {
-    case vk::BufferUsageFlagBits::eVertexBuffer:
-        return vk::AccessFlagBits::eVertexAttributeRead;
-    case vk::BufferUsageFlagBits::eIndexBuffer:
-        return vk::AccessFlagBits::eIndexRead;
-    case vk::BufferUsageFlagBits::eUniformBuffer:
-        return vk::AccessFlagBits::eUniformRead;
-    case vk::BufferUsageFlagBits::eUniformTexelBuffer:
-        return vk::AccessFlagBits::eShaderRead;
-    default:
-        LOG_CRITICAL(Render_Vulkan, "Unknown usage flag {}", usage);
-        UNREACHABLE();
+namespace {
+
+constexpr u64 WATCHES_INITIAL_RESERVE = 0x4000;
+constexpr u64 WATCHES_RESERVE_CHUNK = 0x1000;
+
+/// Find a memory type with the passed requirements
+std::optional<u32> FindMemoryType(const vk::PhysicalDeviceMemoryProperties& properties,
+                                  vk::MemoryPropertyFlags wanted,
+                                  u32 filter = std::numeric_limits<u32>::max()) {
+    for (u32 i = 0; i < properties.memoryTypeCount; ++i) {
+        const auto flags = properties.memoryTypes[i].propertyFlags;
+        if ((flags & wanted) == wanted && (filter & (1U << i)) != 0) {
+            return i;
+        }
     }
-    return vk::AccessFlagBits::eNone;
+    return std::nullopt;
 }
 
-[[nodiscard]] vk::PipelineStageFlags MakePipelineStage(vk::BufferUsageFlagBits usage) {
-    switch (usage) {
-    case vk::BufferUsageFlagBits::eVertexBuffer:
-        return vk::PipelineStageFlagBits::eVertexInput;
-    case vk::BufferUsageFlagBits::eIndexBuffer:
-        return vk::PipelineStageFlagBits::eVertexInput;
-    case vk::BufferUsageFlagBits::eUniformBuffer:
-        return vk::PipelineStageFlagBits::eVertexShader |
-               vk::PipelineStageFlagBits::eFragmentShader;
-    case vk::BufferUsageFlagBits::eUniformTexelBuffer:
-        return vk::PipelineStageFlagBits::eFragmentShader;
-    default:
-        LOG_CRITICAL(Render_Vulkan, "Unknown usage flag {}", usage);
-        UNREACHABLE();
+/// Get the preferred host visible memory type.
+u32 GetMemoryType(const vk::PhysicalDeviceMemoryProperties& properties, bool readback,
+                  u32 filter = std::numeric_limits<u32>::max()) {
+    // Prefer device local host visible allocations. Both AMD and Nvidia now provide one.
+    // Otherwise search for a host visible allocation.
+    const vk::MemoryPropertyFlags HOST_MEMORY =
+        vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent;
+    const vk::MemoryPropertyFlags DYNAMIC_MEMORY =
+        HOST_MEMORY | (readback ? vk::MemoryPropertyFlagBits::eHostCached
+                                : vk::MemoryPropertyFlagBits::eDeviceLocal);
+
+    std::optional preferred_type = FindMemoryType(properties, DYNAMIC_MEMORY);
+    if (!preferred_type) {
+        preferred_type = FindMemoryType(properties, HOST_MEMORY);
+        ASSERT_MSG(preferred_type, "No host visible and coherent memory type found");
     }
-    return vk::PipelineStageFlagBits::eNone;
+    return preferred_type.value_or(0);
 }
 
-StagingBuffer::StagingBuffer(const Instance& instance, u32 size, bool readback)
-    : instance{instance} {
-    const vk::BufferUsageFlags usage =
-        readback ? vk::BufferUsageFlagBits::eTransferDst : vk::BufferUsageFlagBits::eTransferSrc;
-    const vk::BufferCreateInfo buffer_info = {.size = size, .usage = usage};
+} // Anonymous namespace
 
-    const VmaAllocationCreateFlags flags =
-        readback ? VMA_ALLOCATION_CREATE_HOST_ACCESS_RANDOM_BIT
-                 : VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT;
-    const VmaAllocationCreateInfo alloc_create_info = {
-        .flags = flags | VMA_ALLOCATION_CREATE_MAPPED_BIT,
-        .usage = VMA_MEMORY_USAGE_AUTO_PREFER_HOST,
-    };
-
-    VkBuffer unsafe_buffer = VK_NULL_HANDLE;
-    VkBufferCreateInfo unsafe_buffer_info = static_cast<VkBufferCreateInfo>(buffer_info);
-    VmaAllocationInfo alloc_info;
-    VmaAllocator allocator = instance.GetAllocator();
-
-    vmaCreateBuffer(allocator, &unsafe_buffer_info, &alloc_create_info, &unsafe_buffer, &allocation,
-                    &alloc_info);
-
-    buffer = vk::Buffer{unsafe_buffer};
-    mapped = std::span{reinterpret_cast<std::byte*>(alloc_info.pMappedData), size};
-}
-
-StagingBuffer::~StagingBuffer() {
-    vmaDestroyBuffer(instance.GetAllocator(), static_cast<VkBuffer>(buffer), allocation);
-}
-
-StreamBuffer::StreamBuffer(const Instance& instance, Scheduler& scheduler, u32 size, bool readback)
-    : instance{instance}, scheduler{scheduler}, staging{instance, size, readback}, total_size{size},
-      bucket_size{size / BUCKET_COUNT}, readback{readback} {}
-
-StreamBuffer::StreamBuffer(const Instance& instance, Scheduler& scheduler, u32 size,
-                           vk::BufferUsageFlagBits usage, std::span<const vk::Format> view_formats,
-                           bool readback)
-    : instance{instance}, scheduler{scheduler}, staging{instance, size, readback}, usage{usage},
-      total_size{size}, bucket_size{size / BUCKET_COUNT}, readback{readback} {
-
-    const vk::BufferCreateInfo buffer_info = {
-        .size = total_size,
-        .usage = usage | vk::BufferUsageFlagBits::eTransferDst,
-    };
-
-    const VmaAllocationCreateInfo alloc_create_info = {
-        .usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE,
-    };
-
-    VkBuffer unsafe_buffer = VK_NULL_HANDLE;
-    VkBufferCreateInfo unsafe_buffer_info = static_cast<VkBufferCreateInfo>(buffer_info);
-    VmaAllocationInfo alloc_info;
-    VmaAllocator allocator = instance.GetAllocator();
-
-    vmaCreateBuffer(allocator, &unsafe_buffer_info, &alloc_create_info, &unsafe_buffer, &allocation,
-                    &alloc_info);
-
-    gpu_buffer = vk::Buffer{unsafe_buffer};
-
-    ASSERT(view_formats.size() < MAX_BUFFER_VIEWS);
-
-    vk::Device device = instance.GetDevice();
-    for (std::size_t i = 0; i < view_formats.size(); i++) {
-        const vk::BufferViewCreateInfo view_info = {
-            .buffer = gpu_buffer,
-            .format = view_formats[i],
-            .offset = 0,
-            .range = total_size,
-        };
-
-        views[i] = device.createBufferView(view_info);
-    }
-
-    view_count = view_formats.size();
+StreamBuffer::StreamBuffer(const Instance& instance_, Scheduler& scheduler_,
+                           vk::BufferUsageFlags usage_, u64 size, bool readback_)
+    : instance{instance_}, scheduler{scheduler_}, usage{usage_}, readback{readback_} {
+    CreateBuffers(size);
+    ReserveWatches(current_watches, WATCHES_INITIAL_RESERVE);
+    ReserveWatches(previous_watches, WATCHES_INITIAL_RESERVE);
 }
 
 StreamBuffer::~StreamBuffer() {
-    if (gpu_buffer) {
-        vk::Device device = instance.GetDevice();
-        vmaDestroyBuffer(instance.GetAllocator(), static_cast<VkBuffer>(gpu_buffer), allocation);
-        for (std::size_t i = 0; i < view_count; i++) {
-            device.destroyBufferView(views[i]);
-        }
-    }
+    const vk::Device device = instance.GetDevice();
+    device.unmapMemory(memory);
+    device.destroyBuffer(buffer);
+    device.freeMemory(memory);
 }
 
-std::tuple<u8*, u32, bool> StreamBuffer::Map(u32 size) {
-    ASSERT(size <= total_size);
-    size = Common::AlignUp(size, 16);
+std::tuple<u8*, u64, bool> StreamBuffer::Map(u64 size, u64 alignment) {
+    ASSERT(size <= stream_buffer_size);
+    mapped_size = size;
 
-    Bucket& bucket = buckets[bucket_index];
-
-    if (bucket.cursor + size > bucket_size) {
-        bucket.gpu_tick = scheduler.CurrentTick();
-        MoveNextBucket();
-        return Map(size);
+    if (alignment > 0) {
+        offset = Common::AlignUp(offset, alignment);
     }
 
-    const bool invalidate = std::exchange(bucket.invalid, false);
-    const u32 buffer_offset = bucket_index * bucket_size + bucket.cursor;
-    u8* mapped = reinterpret_cast<u8*>(staging.mapped.data() + buffer_offset);
+    WaitPendingOperations(offset);
 
-    return std::make_tuple(mapped, buffer_offset, invalidate);
+    bool invalidate{false};
+    if (offset + size > stream_buffer_size) {
+        // The buffer would overflow, save the amount of used watches and reset the state.
+        invalidate = true;
+        invalidation_mark = current_watch_cursor;
+        current_watch_cursor = 0;
+        offset = 0;
+
+        // Swap watches and reset waiting cursors.
+        std::swap(previous_watches, current_watches);
+        wait_cursor = 0;
+        wait_bound = 0;
+    }
+
+    return std::make_tuple(mapped + offset, offset, invalidate);
 }
 
-void StreamBuffer::Commit(u32 size) {
-    size = Common::AlignUp(size, 16);
-    buckets[bucket_index].cursor += size;
+void StreamBuffer::Commit(u64 size) {
+    ASSERT_MSG(size <= mapped_size, "Reserved size {} is too small compared to {}", mapped_size,
+               size);
+
+    offset += size;
+
+    if (current_watch_cursor + 1 >= current_watches.size()) {
+        // Ensure that there are enough watches.
+        ReserveWatches(current_watches, WATCHES_RESERVE_CHUNK);
+    }
+    auto& watch = current_watches[current_watch_cursor++];
+    watch.upper_bound = offset;
+    watch.tick = scheduler.CurrentTick();
 }
 
-void StreamBuffer::Flush() {
-    if (readback) {
-        LOG_WARNING(Render_Vulkan, "Cannot flush read only buffer");
+void StreamBuffer::CreateBuffers(u64 prefered_size) {
+    const vk::Device device = instance.GetDevice();
+    const auto memory_properties = instance.GetPhysicalDevice().getMemoryProperties();
+    const u32 preferred_type = GetMemoryType(memory_properties, readback);
+    const u32 preferred_heap = memory_properties.memoryTypes[preferred_type].heapIndex;
+
+    // Substract from the preferred heap size some bytes to avoid getting out of memory.
+    const VkDeviceSize heap_size = memory_properties.memoryHeaps[preferred_heap].size;
+    // As per DXVK's example, using `heap_size / 2`
+    const VkDeviceSize allocable_size = heap_size / 2;
+    buffer = device.createBuffer({
+        .size = std::min(prefered_size, allocable_size),
+        .usage = usage,
+    });
+
+    const auto requirements = device.getBufferMemoryRequirements(buffer);
+    const u32 required_flags = requirements.memoryTypeBits;
+    stream_buffer_size = static_cast<u64>(requirements.size);
+
+    memory = device.allocateMemory({
+        .allocationSize = requirements.size,
+        .memoryTypeIndex = GetMemoryType(memory_properties, required_flags),
+    });
+
+    device.bindBufferMemory(buffer, memory, 0);
+    mapped = reinterpret_cast<u8*>(device.mapMemory(memory, 0, VK_WHOLE_SIZE));
+}
+
+void StreamBuffer::ReserveWatches(std::vector<Watch>& watches, std::size_t grow_size) {
+    watches.resize(watches.size() + grow_size);
+}
+
+void StreamBuffer::WaitPendingOperations(u64 requested_upper_bound) {
+    if (!invalidation_mark) {
         return;
     }
-
-    Bucket& bucket = buckets[bucket_index];
-    const u32 flush_start = bucket_index * bucket_size + bucket.flush_cursor;
-    const u32 flush_size = bucket.cursor - bucket.flush_cursor;
-    ASSERT(flush_size <= bucket_size);
-    ASSERT(flush_start + flush_size <= total_size);
-
-    // Ensure all staging writes are visible to the host memory domain
-    if (flush_size > 0) [[likely]] {
-        VmaAllocator allocator = instance.GetAllocator();
-        vmaFlushAllocation(allocator, staging.allocation, flush_start, flush_size);
-        if (gpu_buffer) {
-            scheduler.Record([this, flush_start, flush_size](vk::CommandBuffer,
-                                                             vk::CommandBuffer upload_cmdbuf) {
-                const vk::BufferCopy copy_region = {
-                    .srcOffset = flush_start,
-                    .dstOffset = flush_start,
-                    .size = flush_size,
-                };
-
-                upload_cmdbuf.copyBuffer(staging.buffer, gpu_buffer, copy_region);
-
-                const vk::BufferMemoryBarrier buffer_barrier = {
-                    .srcAccessMask = vk::AccessFlagBits::eTransferWrite,
-                    .dstAccessMask = MakeAccessFlags(usage),
-                    .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-                    .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-                    .buffer = gpu_buffer,
-                    .offset = flush_start,
-                    .size = flush_size,
-                };
-
-                upload_cmdbuf.pipelineBarrier(
-                    vk::PipelineStageFlagBits::eTransfer, MakePipelineStage(usage),
-                    vk::DependencyFlagBits::eByRegion, {}, buffer_barrier, {});
-            });
-        }
-        bucket.flush_cursor += flush_size;
+    while (requested_upper_bound < wait_bound && wait_cursor < *invalidation_mark) {
+        auto& watch = previous_watches[wait_cursor];
+        wait_bound = watch.upper_bound;
+        scheduler.Wait(watch.tick);
+        ++wait_cursor;
     }
-}
-
-void StreamBuffer::Invalidate() {
-    if (!readback) {
-        return;
-    }
-
-    Bucket& bucket = buckets[bucket_index];
-    const u32 flush_start = bucket_index * bucket_size + bucket.flush_cursor;
-    const u32 flush_size = bucket.cursor - bucket.flush_cursor;
-    ASSERT(flush_size <= bucket_size);
-
-    if (flush_size > 0) [[likely]] {
-        // Ensure the staging memory can be read by the host
-        VmaAllocator allocator = instance.GetAllocator();
-        vmaInvalidateAllocation(allocator, staging.allocation, flush_start, flush_size);
-        bucket.flush_cursor += flush_size;
-    }
-}
-
-void StreamBuffer::MoveNextBucket() {
-    // Flush and Invalidate are bucket local operations for simplicity so perform them here
-    if (readback) {
-        Invalidate();
-    } else {
-        Flush();
-    }
-
-    bucket_index = (bucket_index + 1) % BUCKET_COUNT;
-    Bucket& next_bucket = buckets[bucket_index];
-    scheduler.Wait(next_bucket.gpu_tick);
-    next_bucket.cursor = 0;
-    next_bucket.flush_cursor = 0;
-    next_bucket.invalid = true;
 }
 
 } // namespace Vulkan

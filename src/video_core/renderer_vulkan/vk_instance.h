@@ -177,7 +177,17 @@ public:
 
     /// Returns the minimum required alignment for uniforms
     vk::DeviceSize UniformMinAlignment() const {
-        return properties.limits.minUniformBufferOffsetAlignment;
+        return limits.minUniformBufferOffsetAlignment;
+    }
+
+    /// Returns the maximum supported elements in a texel buffer
+    u32 MaxTexelBufferElements() const {
+        return limits.maxTexelBufferElements;
+    }
+
+    /// Returns true if triangle fan is an accepted primitive topology
+    bool IsTriangleFanSupported() const {
+        return triangle_fan_supported;
     }
 
 private:
@@ -204,6 +214,7 @@ private:
     vk::SurfaceKHR surface;
     vk::PhysicalDeviceProperties properties;
     vk::PhysicalDeviceFeatures features;
+    vk::PhysicalDeviceLimits limits;
     vk::DriverIdKHR driver_id;
     vk::DebugUtilsMessengerEXT debug_messenger;
     std::string vendor_name;
@@ -216,6 +227,7 @@ private:
     u32 present_queue_family_index{0};
     u32 graphics_queue_family_index{0};
 
+    bool triangle_fan_supported{true};
     bool timeline_semaphores{};
     bool extended_dynamic_state{};
     bool push_descriptors{};

@@ -78,7 +78,6 @@ public:
     void PrepareVideoDumping() override {}
     void CleanupVideoDumping() override {}
     void Sync() override;
-    void FlushBuffers();
 
 private:
     void ReloadSampler();

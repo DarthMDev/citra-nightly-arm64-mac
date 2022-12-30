@@ -164,7 +164,7 @@ Instance::Instance(Frontend::EmuWindow& window, u32 physical_device_index)
     VULKAN_HPP_DEFAULT_DISPATCHER.init(vkGetInstanceProcAddr);
 
     // Enable the instance extensions the backend uses
-    auto extensions = GetInstanceExtensions(window_info.type, false);
+    auto extensions = GetInstanceExtensions(window_info.type, enable_validation);
 
     // Use required platform-specific flags
     auto flags = GetInstanceFlags();
@@ -238,6 +238,7 @@ Instance::Instance(Frontend::EmuWindow& window, u32 physical_device_index)
 
     physical_device = physical_devices[physical_device_index];
     properties = physical_device.getProperties();
+    limits = properties.limits;
 
     LOG_INFO(Render_Vulkan, "Creating logical device for physical device: {}",
              properties.deviceName);
@@ -392,7 +393,6 @@ bool Instance::CreateDevice() {
     };
 
     AddExtension(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
-    AddExtension(VK_EXT_INDEX_TYPE_UINT8_EXTENSION_NAME);
     timeline_semaphores = AddExtension(VK_KHR_TIMELINE_SEMAPHORE_EXTENSION_NAME);
     extended_dynamic_state = AddExtension(VK_EXT_EXTENDED_DYNAMIC_STATE_EXTENSION_NAME);
     push_descriptors = AddExtension(VK_KHR_PUSH_DESCRIPTOR_EXTENSION_NAME);
@@ -451,7 +451,7 @@ bool Instance::CreateDevice() {
     };
 
     const u32 queue_count = graphics_queue_family_index != present_queue_family_index ? 2u : 1u;
-    const vk::StructureChain device_chain = {
+    vk::StructureChain device_chain = {
         vk::DeviceCreateInfo{
             .queueCreateInfoCount = queue_count,
             .pQueueCreateInfos = queue_infos.data(),
@@ -459,24 +459,45 @@ bool Instance::CreateDevice() {
             .ppEnabledExtensionNames = enabled_extensions.data(),
         },
         vk::PhysicalDeviceFeatures2{
-            .features =
-                {
-                    .robustBufferAccess = features.robustBufferAccess,
-                    .geometryShader = features.geometryShader,
-                    .dualSrcBlend = features.dualSrcBlend,
-                    .logicOp = features.logicOp,
-                    .depthClamp = features.depthClamp,
-                    .largePoints = features.largePoints,
-                    .samplerAnisotropy = features.samplerAnisotropy,
-                    .fragmentStoresAndAtomics = features.fragmentStoresAndAtomics,
-                    .shaderStorageImageMultisample = features.shaderStorageImageMultisample,
-                    .shaderClipDistance = features.shaderClipDistance,
-                },
+            .features{
+                .robustBufferAccess = features.robustBufferAccess,
+                .geometryShader = features.geometryShader,
+                .dualSrcBlend = features.dualSrcBlend,
+                .logicOp = features.logicOp,
+                .depthClamp = features.depthClamp,
+                .largePoints = features.largePoints,
+                .samplerAnisotropy = features.samplerAnisotropy,
+                .fragmentStoresAndAtomics = features.fragmentStoresAndAtomics,
+                .shaderStorageImageMultisample = features.shaderStorageImageMultisample,
+                .shaderClipDistance = features.shaderClipDistance,
+            },
         },
+        feature_chain.get<vk::PhysicalDeviceTimelineSemaphoreFeaturesKHR>(),
         feature_chain.get<vk::PhysicalDeviceIndexTypeUint8FeaturesEXT>(),
         feature_chain.get<vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT>(),
-        feature_chain.get<vk::PhysicalDeviceTimelineSemaphoreFeaturesKHR>(),
-        feature_chain.get<vk::PhysicalDeviceCustomBorderColorFeaturesEXT>()};
+        feature_chain.get<vk::PhysicalDeviceCustomBorderColorFeaturesEXT>(),
+    };
+
+    if (!extended_dynamic_state) {
+        device_chain.unlink<vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT>();
+    }
+
+    if (!custom_border_color) {
+        device_chain.unlink<vk::PhysicalDeviceCustomBorderColorFeaturesEXT>();
+    }
+
+    if (!index_type_uint8) {
+        device_chain.unlink<vk::PhysicalDeviceIndexTypeUint8FeaturesEXT>();
+    }
+
+#if VK_KHR_portability_subset
+    const vk::StructureChain portability_chain =
+        physical_device.getFeatures2<vk::PhysicalDeviceFeatures2,
+                                     vk::PhysicalDevicePortabilitySubsetFeaturesKHR>();
+    const vk::PhysicalDevicePortabilitySubsetFeaturesKHR portability_features =
+        portability_chain.get<vk::PhysicalDevicePortabilitySubsetFeaturesKHR>();
+    triangle_fan_supported = portability_features.triangleFans;
+#endif
 
     try {
         device = physical_device.createDevice(device_chain.get());

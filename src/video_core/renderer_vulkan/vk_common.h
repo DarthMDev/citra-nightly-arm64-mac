@@ -8,6 +8,7 @@
 #include "common/common_types.h"
 
 // Include vulkan-hpp header
+#define VK_ENABLE_BETA_EXTENSIONS
 #define VK_NO_PROTOTYPES 1
 #define VULKAN_HPP_DISPATCH_LOADER_DYNAMIC 1
 #define VULKAN_HPP_NO_CONSTRUCTORS

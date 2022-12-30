@@ -28,14 +28,12 @@ DECLARE_ENUM_FLAG_OPERATORS(StateFlags)
 
 class Instance;
 class RenderpassCache;
-class RendererVulkan;
 
 /// The scheduler abstracts command buffer and fence management with an interface that's able to do
 /// OpenGL-like operations on Vulkan command buffers.
 class Scheduler {
 public:
-    explicit Scheduler(const Instance& instance, RenderpassCache& renderpass_cache,
-                       RendererVulkan& renderer);
+    explicit Scheduler(const Instance& instance, RenderpassCache& renderpass_cache);
     ~Scheduler();
 
     /// Sends the current execution context to the GPU.
@@ -198,7 +196,6 @@ private:
 private:
     const Instance& instance;
     RenderpassCache& renderpass_cache;
-    RendererVulkan& renderer;
     MasterSemaphore master_semaphore;
     CommandPool command_pool;
     std::unique_ptr<CommandChunk> chunk;

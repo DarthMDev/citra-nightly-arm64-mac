@@ -3,6 +3,7 @@
 // Refer to the license.txt file included.
 
 #include <limits>
+#include "common/alignment.h"
 #include "core/memory.h"
 #include "video_core/pica_state.h"
 #include "video_core/rasterizer_accelerated.h"
@@ -210,7 +211,7 @@ RasterizerAccelerated::VertexArrayInfo RasterizerAccelerated::AnalyzeVertexArray
     u32 vs_input_size = 0;
     for (const auto& loader : vertex_attributes.attribute_loaders) {
         if (loader.component_count != 0) {
-            vs_input_size += loader.byte_count * vertex_num;
+            vs_input_size += Common::AlignUp(loader.byte_count * vertex_num, 4);
         }
     }
 

@@ -17,23 +17,18 @@
 #include "video_core/renderer_vulkan/vk_scheduler.h"
 #include "video_core/video_core.h"
 
-#include <vk_mem_alloc.h>
-
 namespace Vulkan {
 
-constexpr u32 VERTEX_BUFFER_SIZE = 64 * 1024 * 1024;
-constexpr u32 INDEX_BUFFER_SIZE = 16 * 1024 * 1024;
-constexpr u32 UNIFORM_BUFFER_SIZE = 16 * 1024 * 1024;
-constexpr u32 TEXTURE_BUFFER_SIZE = 512 * 1024;
+using TriangleTopology = Pica::PipelineRegs::TriangleTopology;
 
-constexpr std::array TEXTURE_BUFFER_LF_FORMATS = {
-    vk::Format::eR32G32Sfloat,
-};
+constexpr u64 VERTEX_BUFFER_SIZE = 128 * 1024 * 1024;
+constexpr u64 TEXTURE_BUFFER_SIZE = 2 * 1024 * 1024;
 
-constexpr std::array TEXTURE_BUFFER_FORMATS = {
-    vk::Format::eR32G32Sfloat,
-    vk::Format::eR32G32B32A32Sfloat,
-};
+constexpr vk::BufferUsageFlags BUFFER_USAGE = vk::BufferUsageFlagBits::eVertexBuffer |
+                                              vk::BufferUsageFlagBits::eIndexBuffer |
+                                              vk::BufferUsageFlagBits::eUniformBuffer;
+
+constexpr vk::BufferUsageFlags TEX_BUFFER_USAGE = vk::BufferUsageFlagBits::eUniformTexelBuffer;
 
 constexpr VideoCore::SurfaceParams NULL_PARAMS = {
     .width = 1,
@@ -55,6 +50,13 @@ struct DrawParams {
     bool is_indexed;
 };
 
+[[nodiscard]] u64 TextureBufferSize(const Instance& instance) {
+    // Use the smallest texel size from the texel views
+    // which corresponds to eR32G32Sfloat
+    const u64 max_size = instance.MaxTexelBufferElements() * 8;
+    return std::min(max_size, TEXTURE_BUFFER_SIZE);
+}
+
 RasterizerVulkan::RasterizerVulkan(Frontend::EmuWindow& emu_window, const Instance& instance,
                                    Scheduler& scheduler, DescriptorManager& desc_manager,
                                    TextureRuntime& runtime, RenderpassCache& renderpass_cache)
@@ -63,24 +65,17 @@ RasterizerVulkan::RasterizerVulkan(Frontend::EmuWindow& emu_window, const Instan
       pipeline_cache{instance, scheduler, renderpass_cache, desc_manager},
       null_surface{NULL_PARAMS, vk::Format::eR8G8B8A8Unorm, NULL_USAGE, runtime},
       null_storage_surface{NULL_PARAMS, vk::Format::eR32Uint, NULL_STORAGE_USAGE, runtime},
-      vertex_buffer{
-          instance, scheduler, VERTEX_BUFFER_SIZE, vk::BufferUsageFlagBits::eVertexBuffer, {}},
-      uniform_buffer{
-          instance, scheduler, UNIFORM_BUFFER_SIZE, vk::BufferUsageFlagBits::eUniformBuffer, {}},
-      index_buffer{
-          instance, scheduler, INDEX_BUFFER_SIZE, vk::BufferUsageFlagBits::eIndexBuffer, {}},
-      texture_buffer{instance, scheduler, TEXTURE_BUFFER_SIZE,
-                     vk::BufferUsageFlagBits::eUniformTexelBuffer, TEXTURE_BUFFER_FORMATS},
-      texture_lf_buffer{instance, scheduler, TEXTURE_BUFFER_SIZE,
-                        vk::BufferUsageFlagBits::eUniformTexelBuffer, TEXTURE_BUFFER_LF_FORMATS} {
+      stream_buffer{instance, scheduler, BUFFER_USAGE, VERTEX_BUFFER_SIZE},
+      texture_buffer{instance, scheduler, TEX_BUFFER_USAGE, TextureBufferSize(instance)},
+      texture_lf_buffer{instance, scheduler, TEX_BUFFER_USAGE, TextureBufferSize(instance)} {
 
-    vertex_buffers.fill(vertex_buffer.GetHandle());
+    vertex_buffers.fill(stream_buffer.Handle());
 
     uniform_buffer_alignment = instance.UniformMinAlignment();
     uniform_size_aligned_vs =
-        Common::AlignUp<std::size_t>(sizeof(Pica::Shader::VSUniformData), uniform_buffer_alignment);
+        Common::AlignUp(sizeof(Pica::Shader::VSUniformData), uniform_buffer_alignment);
     uniform_size_aligned_fs =
-        Common::AlignUp<std::size_t>(sizeof(Pica::Shader::UniformData), uniform_buffer_alignment);
+        Common::AlignUp(sizeof(Pica::Shader::UniformData), uniform_buffer_alignment);
 
     // Define vertex layout for software shaders
     MakeSoftwareVertexLayout();
@@ -96,15 +91,31 @@ RasterizerVulkan::RasterizerVulkan(Frontend::EmuWindow& emu_window, const Instan
 
     default_sampler = CreateSampler(default_sampler_info);
 
+    const vk::Device device = instance.GetDevice();
+    texture_lf_view = device.createBufferView({
+        .buffer = texture_lf_buffer.Handle(),
+        .format = vk::Format::eR32G32Sfloat,
+        .offset = 0,
+        .range = VK_WHOLE_SIZE,
+    });
+    texture_rg_view = device.createBufferView({
+        .buffer = texture_buffer.Handle(),
+        .format = vk::Format::eR32G32Sfloat,
+        .offset = 0,
+        .range = VK_WHOLE_SIZE,
+    });
+    texture_rgba_view = device.createBufferView({
+        .buffer = texture_buffer.Handle(),
+        .format = vk::Format::eR32G32B32A32Sfloat,
+        .offset = 0,
+        .range = VK_WHOLE_SIZE,
+    });
+
     // Since we don't have access to VK_EXT_descriptor_indexing we need to intiallize
     // all descriptor sets even the ones we don't use. Use default_texture for this
-    const u32 vs_uniform_size = sizeof(Pica::Shader::VSUniformData);
-    const u32 fs_uniform_size = sizeof(Pica::Shader::UniformData);
-    pipeline_cache.BindBuffer(0, uniform_buffer.GetHandle(), 0, vs_uniform_size);
-    pipeline_cache.BindBuffer(1, uniform_buffer.GetHandle(), vs_uniform_size, fs_uniform_size);
-    pipeline_cache.BindTexelBuffer(2, texture_lf_buffer.GetView());
-    pipeline_cache.BindTexelBuffer(3, texture_buffer.GetView(0));
-    pipeline_cache.BindTexelBuffer(4, texture_buffer.GetView(1));
+    pipeline_cache.BindTexelBuffer(2, texture_lf_view);
+    pipeline_cache.BindTexelBuffer(3, texture_rg_view);
+    pipeline_cache.BindTexelBuffer(4, texture_rgba_view);
 
     for (u32 i = 0; i < 4; i++) {
         pipeline_cache.BindTexture(i, null_surface.GetImageView());
@@ -122,8 +133,7 @@ RasterizerVulkan::RasterizerVulkan(Frontend::EmuWindow& emu_window, const Instan
 
 RasterizerVulkan::~RasterizerVulkan() {
     scheduler.Finish();
-
-    vk::Device device = instance.GetDevice();
+    const vk::Device device = instance.GetDevice();
 
     for (auto& [key, sampler] : samplers) {
         device.destroySampler(sampler);
@@ -134,6 +144,9 @@ RasterizerVulkan::~RasterizerVulkan() {
     }
 
     device.destroySampler(default_sampler);
+    device.destroyBufferView(texture_lf_view);
+    device.destroyBufferView(texture_rg_view);
+    device.destroyBufferView(texture_rgba_view);
 }
 
 void RasterizerVulkan::LoadDiskResources(const std::atomic_bool& stop_loading,
@@ -189,7 +202,7 @@ void RasterizerVulkan::SyncFixedState() {
 
 void RasterizerVulkan::SetupVertexArray(u32 vs_input_size, u32 vs_input_index_min,
                                         u32 vs_input_index_max) {
-    auto [array_ptr, array_offset, invalidate] = vertex_buffer.Map(vs_input_size);
+    auto [array_ptr, array_offset, invalidate] = stream_buffer.Map(vs_input_size, 16);
 
     /**
      * The Nintendo 3DS has 12 attribute loaders which are used to tell the GPU
@@ -262,11 +275,11 @@ void RasterizerVulkan::SetupVertexArray(u32 vs_input_size, u32 vs_input_index_mi
 
         // Keep track of the binding offsets so we can bind the vertex buffer later
         binding_offsets[layout.binding_count++] = array_offset + buffer_offset;
-        buffer_offset += Common::AlignUp(data_size, 16);
+        buffer_offset += Common::AlignUp(data_size, 4);
     }
 
     binding_offsets[layout.binding_count] = array_offset + buffer_offset;
-    vertex_buffer.Commit(buffer_offset);
+    stream_buffer.Commit(buffer_offset);
 
     // Assign the rest of the attributes to the last binding
     SetupFixedAttribs();
@@ -283,7 +296,7 @@ void RasterizerVulkan::SetupFixedAttribs() {
     const auto& vertex_attributes = regs.pipeline.vertex_attributes;
     VertexLayout& layout = pipeline_info.vertex_layout;
 
-    auto [fixed_ptr, fixed_offset, _] = vertex_buffer.Map(16 * sizeof(Common::Vec4f));
+    auto [fixed_ptr, fixed_offset, _] = stream_buffer.Map(16 * sizeof(Common::Vec4f), 0);
 
     // Reserve the last binding for fixed and default attributes
     // Place the default attrib at offset zero for easy access
@@ -336,7 +349,7 @@ void RasterizerVulkan::SetupFixedAttribs() {
     binding.fixed.Assign(1);
     binding.stride.Assign(offset);
 
-    vertex_buffer.Commit(offset);
+    stream_buffer.Commit(offset);
 }
 
 MICROPROFILE_DEFINE(Vulkan_VS, "Vulkan", "Vertex Shader Setup", MP_RGB(192, 128, 128));
@@ -380,8 +393,10 @@ bool RasterizerVulkan::AccelerateDrawBatchInternal(bool is_indexed) {
     const auto [vs_input_index_min, vs_input_index_max, vs_input_size] =
         AnalyzeVertexArray(is_indexed);
 
-    if (vs_input_size > VERTEX_BUFFER_SIZE) {
-        LOG_WARNING(Render_Vulkan, "Too large vertex input size {}", vs_input_size);
+    if (regs.pipeline.triangle_topology == TriangleTopology::Fan &&
+        !instance.IsTriangleFanSupported()) {
+        LOG_DEBUG(Render_Vulkan,
+                  "Skipping accelerated draw with unsupported triangle fan topology");
         return false;
     }
 
@@ -430,7 +445,7 @@ void RasterizerVulkan::SetupIndexArray() {
         regs.pipeline.vertex_attributes.GetPhysicalBaseAddress() +
         regs.pipeline.index_array.offset);
 
-    auto [index_ptr, index_offset, _] = index_buffer.Map(index_buffer_size);
+    auto [index_ptr, index_offset, _] = stream_buffer.Map(index_buffer_size, 2);
     if (index_u8 && !native_u8) {
         u16* index_ptr_u16 = reinterpret_cast<u16*>(index_ptr);
         for (u32 i = 0; i < regs.pipeline.num_vertices; i++) {
@@ -440,11 +455,11 @@ void RasterizerVulkan::SetupIndexArray() {
         std::memcpy(index_ptr, index_data, index_buffer_size);
     }
 
-    index_buffer.Commit(index_buffer_size);
+    stream_buffer.Commit(index_buffer_size);
 
     scheduler.Record([this, index_offset = index_offset,
                       index_type = index_type](vk::CommandBuffer render_cmdbuf, vk::CommandBuffer) {
-        render_cmdbuf.bindIndexBuffer(index_buffer.GetHandle(), index_offset, index_type);
+        render_cmdbuf.bindIndexBuffer(stream_buffer.Handle(), index_offset, index_type);
     });
 }
 
@@ -759,13 +774,13 @@ bool RasterizerVulkan::Draw(bool accelerate, bool is_indexed) {
             const u32 vertex_size = vertices * sizeof(HardwareVertex);
 
             // Copy vertex data
-            auto [array_ptr, offset, _] = vertex_buffer.Map(vertex_size);
+            auto [array_ptr, offset, _] = stream_buffer.Map(vertex_size, sizeof(HardwareVertex));
             std::memcpy(array_ptr, vertex_batch.data() + base_vertex, vertex_size);
-            vertex_buffer.Commit(vertex_size);
+            stream_buffer.Commit(vertex_size);
 
             scheduler.Record([this, vertices, base_vertex,
                               offset = offset](vk::CommandBuffer render_cmdbuf, vk::CommandBuffer) {
-                render_cmdbuf.bindVertexBuffers(0, vertex_buffer.GetHandle(), offset);
+                render_cmdbuf.bindVertexBuffers(0, stream_buffer.Handle(), offset);
                 render_cmdbuf.draw(vertices, 1, base_vertex, 0);
             });
         }
@@ -787,11 +802,11 @@ bool RasterizerVulkan::Draw(bool accelerate, bool is_indexed) {
                                    depth_surface);
     }
 
-    static int submit_threshold = 50;
+    static int submit_threshold = 40;
     submit_threshold--;
     if (!submit_threshold) {
-        submit_threshold = 50;
-        scheduler.DispatchWork();
+        submit_threshold = 40;
+        scheduler.Flush();
     }
 
     return succeeded;
@@ -1152,14 +1167,6 @@ vk::Framebuffer RasterizerVulkan::CreateFramebuffer(const FramebufferInfo& info)
     return device.createFramebuffer(framebuffer_info);
 }
 
-void RasterizerVulkan::FlushBuffers() {
-    vertex_buffer.Flush();
-    uniform_buffer.Flush();
-    index_buffer.Flush();
-    texture_buffer.Flush();
-    texture_lf_buffer.Flush();
-}
-
 void RasterizerVulkan::SyncClipEnabled() {
     uniform_block_data.data.enable_clip1 = Pica::g_state.regs.rasterizer.clip_enable != 0;
 }
@@ -1294,7 +1301,7 @@ void RasterizerVulkan::SyncAndUploadLUTsLF() {
     }
 
     std::size_t bytes_used = 0;
-    auto [buffer, offset, invalidate] = texture_lf_buffer.Map(max_size);
+    auto [buffer, offset, invalidate] = texture_lf_buffer.Map(max_size, sizeof(Common::Vec4f));
 
     // Sync the lighting luts
     if (uniform_block_data.lighting_lut_dirty_any || invalidate) {
@@ -1360,7 +1367,7 @@ void RasterizerVulkan::SyncAndUploadLUTs() {
     }
 
     std::size_t bytes_used = 0;
-    auto [buffer, offset, invalidate] = texture_buffer.Map(max_size);
+    auto [buffer, offset, invalidate] = texture_buffer.Map(max_size, sizeof(Common::Vec4f));
 
     // helper function for SyncProcTexNoiseLUT/ColorMap/AlphaMap
     auto SyncProcTexValueLUT =
@@ -1460,16 +1467,16 @@ void RasterizerVulkan::UploadUniforms(bool accelerate_draw) {
         return;
     }
 
-    u32 used_bytes = 0;
-    const u32 uniform_size = static_cast<u32>(uniform_size_aligned_vs + uniform_size_aligned_fs);
-    auto [uniforms, offset, invalidate] = uniform_buffer.Map(uniform_size);
+    const u64 uniform_size = uniform_size_aligned_vs + uniform_size_aligned_fs;
+    auto [uniforms, offset, invalidate] = stream_buffer.Map(uniform_size, uniform_buffer_alignment);
 
+    u32 used_bytes = 0;
     if (sync_vs) {
         Pica::Shader::VSUniformData vs_uniforms;
         vs_uniforms.uniforms.SetFromRegs(Pica::g_state.regs.vs, Pica::g_state.vs);
         std::memcpy(uniforms + used_bytes, &vs_uniforms, sizeof(vs_uniforms));
 
-        pipeline_cache.BindBuffer(0, uniform_buffer.GetHandle(), offset + used_bytes,
+        pipeline_cache.BindBuffer(0, stream_buffer.Handle(), offset + used_bytes,
                                   sizeof(vs_uniforms));
         used_bytes += static_cast<u32>(uniform_size_aligned_vs);
     }
@@ -1478,13 +1485,13 @@ void RasterizerVulkan::UploadUniforms(bool accelerate_draw) {
         std::memcpy(uniforms + used_bytes, &uniform_block_data.data,
                     sizeof(Pica::Shader::UniformData));
 
-        pipeline_cache.BindBuffer(1, uniform_buffer.GetHandle(), offset + used_bytes,
+        pipeline_cache.BindBuffer(1, stream_buffer.Handle(), offset + used_bytes,
                                   sizeof(uniform_block_data.data));
         uniform_block_data.dirty = false;
         used_bytes += static_cast<u32>(uniform_size_aligned_fs);
     }
 
-    uniform_buffer.Commit(used_bytes);
+    stream_buffer.Commit(used_bytes);
 }
 
 } // namespace Vulkan

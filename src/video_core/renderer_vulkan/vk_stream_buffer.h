@@ -1,101 +1,81 @@
-// Copyright 2022 Citra Emulator Project
+// Copyright 2019 yuzu Emulator Project
 // Licensed under GPLv2 or any later version
 // Refer to the license.txt file included.
 
 #pragma once
 
-#include <array>
-#include <map>
+#include <optional>
 #include <span>
-#include "common/assert.h"
+#include <tuple>
+#include <vector>
 #include "video_core/renderer_vulkan/vk_common.h"
-
-VK_DEFINE_HANDLE(VmaAllocation)
 
 namespace Vulkan {
 
 class Instance;
 class Scheduler;
 
-struct StagingBuffer {
-    StagingBuffer(const Instance& instance, u32 size, bool readback);
-    ~StagingBuffer();
-
-    const Instance& instance;
-    vk::Buffer buffer{};
-    VmaAllocation allocation{};
-    std::span<std::byte> mapped{};
-};
-
-class StreamBuffer {
-    static constexpr u32 MAX_BUFFER_VIEWS = 3;
-    static constexpr u32 BUCKET_COUNT = 2;
+class StreamBuffer final {
+    static constexpr std::size_t MAX_BUFFER_VIEWS = 3;
 
 public:
-    /// Staging only constructor
-    StreamBuffer(const Instance& instance, Scheduler& scheduler, u32 size, bool readback = false);
-    /// Staging + GPU streaming constructor
-    StreamBuffer(const Instance& instance, Scheduler& scheduler, u32 size,
-                 vk::BufferUsageFlagBits usage, std::span<const vk::Format> views,
-                 bool readback = false);
+    explicit StreamBuffer(const Instance& instance, Scheduler& scheduler,
+                          vk::BufferUsageFlags usage, u64 size, bool readback = false);
     ~StreamBuffer();
 
-    StreamBuffer(const StreamBuffer&) = delete;
-    StreamBuffer& operator=(const StreamBuffer&) = delete;
+    /**
+     * Reserves a region of memory from the stream buffer.
+     * @param size Size to reserve.
+     * @returns A pair of a raw memory pointer (with offset added), and the buffer offset
+     */
+    std::tuple<u8*, u64, bool> Map(u64 size, u64 alignment);
 
-    /// Maps aligned staging memory of size bytes
-    std::tuple<u8*, u32, bool> Map(u32 size);
+    /// Ensures that "size" bytes of memory are available to the GPU, potentially recording a copy.
+    void Commit(u64 size);
 
-    /// Commits size bytes from the currently mapped staging memory
-    void Commit(u32 size = 0);
-
-    /// Flushes staging memory to the GPU buffer
-    void Flush();
-
-    /// Invalidates staging memory for reading
-    void Invalidate();
-
-    /// Returns the GPU buffer handle
-    [[nodiscard]] vk::Buffer GetHandle() const {
-        return gpu_buffer;
+    vk::Buffer Handle() const noexcept {
+        return buffer;
     }
 
-    /// Returns the staging buffer handle
-    [[nodiscard]] vk::Buffer GetStagingHandle() const {
-        return staging.buffer;
-    }
-
-    /// Returns an immutable reference to the requested buffer view
-    [[nodiscard]] const vk::BufferView& GetView(u32 index = 0) const {
-        ASSERT(index < view_count);
-        return views[index];
+    u64 Address() const noexcept {
+        return 0;
     }
 
 private:
-    /// Moves to the next bucket
-    void MoveNextBucket();
-
-    struct Bucket {
-        bool invalid = false;
-        u32 gpu_tick = 0;
-        u32 cursor = 0;
-        u32 flush_cursor = 0;
+    struct Watch {
+        u64 tick{};
+        u64 upper_bound{};
     };
 
+    /// Creates Vulkan buffer handles committing the required the required memory.
+    void CreateBuffers(u64 prefered_size);
+
+    /// Increases the amount of watches available.
+    void ReserveWatches(std::vector<Watch>& watches, std::size_t grow_size);
+
+    void WaitPendingOperations(u64 requested_upper_bound);
+
 private:
-    const Instance& instance;
-    Scheduler& scheduler;
-    StagingBuffer staging;
-    vk::Buffer gpu_buffer{};
-    VmaAllocation allocation{};
-    vk::BufferUsageFlagBits usage;
-    std::array<vk::BufferView, MAX_BUFFER_VIEWS> views{};
-    std::array<Bucket, BUCKET_COUNT> buckets;
-    std::size_t view_count = 0;
-    u32 total_size = 0;
-    u32 bucket_size = 0;
-    u32 bucket_index = 0;
-    bool readback = false;
+    const Instance& instance; ///< Vulkan instance.
+    Scheduler& scheduler;     ///< Command scheduler.
+
+    vk::Buffer buffer;        ///< Mapped buffer.
+    vk::DeviceMemory memory;  ///< Memory allocation.
+    u8* mapped{};             ///< Pointer to the mapped memory
+    u64 stream_buffer_size{}; ///< Stream buffer size.
+    vk::BufferUsageFlags usage{};
+    bool readback{}; ///< Flag indicating if the buffer should use cached memory
+
+    u64 offset{};      ///< Buffer iterator.
+    u64 mapped_size{}; ///< Size reserved for the current copy.
+
+    std::vector<Watch> current_watches;           ///< Watches recorded in the current iteration.
+    std::size_t current_watch_cursor{};           ///< Count of watches, reset on invalidation.
+    std::optional<std::size_t> invalidation_mark; ///< Number of watches used in the previous cycle.
+
+    std::vector<Watch> previous_watches; ///< Watches used in the previous iteration.
+    std::size_t wait_cursor{};           ///< Last watch being waited for completion.
+    u64 wait_bound{};                    ///< Highest offset being watched for completion.
 };
 
 } // namespace Vulkan

@@ -26,10 +26,9 @@ void Scheduler::CommandChunk::ExecuteAll(vk::CommandBuffer render_cmdbuf,
     last = nullptr;
 }
 
-Scheduler::Scheduler(const Instance& instance, RenderpassCache& renderpass_cache,
-                     RendererVulkan& renderer)
-    : instance{instance}, renderpass_cache{renderpass_cache}, renderer{renderer},
-      master_semaphore{instance}, command_pool{instance, master_semaphore}, stop_requested{false},
+Scheduler::Scheduler(const Instance& instance, RenderpassCache& renderpass_cache)
+    : instance{instance}, renderpass_cache{renderpass_cache}, master_semaphore{instance},
+      command_pool{instance, master_semaphore}, stop_requested{false},
       use_worker_thread{Settings::values.async_command_recording} {
     AllocateWorkerCommandBuffers();
     if (use_worker_thread) {
@@ -133,10 +132,9 @@ void Scheduler::AllocateWorkerCommandBuffers() {
 
 MICROPROFILE_DEFINE(Vulkan_Submit, "Vulkan", "Submit Exectution", MP_RGB(255, 192, 255));
 void Scheduler::SubmitExecution(vk::Semaphore signal_semaphore, vk::Semaphore wait_semaphore) {
-    const auto handle = master_semaphore.Handle();
+    const vk::Semaphore handle = master_semaphore.Handle();
     const u64 signal_value = master_semaphore.NextTick();
     state = StateFlags::AllDirty;
-    renderer.FlushBuffers();
 
     renderpass_cache.ExitRenderpass();
     Record([signal_semaphore, wait_semaphore, handle, signal_value,

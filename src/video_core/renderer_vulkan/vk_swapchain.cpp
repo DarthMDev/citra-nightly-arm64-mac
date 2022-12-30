@@ -66,7 +66,7 @@ void Swapchain::Create() {
         .queueFamilyIndexCount = queue_family_indices_count,
         .pQueueFamilyIndices = queue_family_indices.data(),
         .preTransform = transform,
-        .compositeAlpha = vk::CompositeAlphaFlagBitsKHR::eInherit,
+        .compositeAlpha = composite_alpha,
         .presentMode = present_mode,
         .clipped = true,
         .oldSwapchain = swapchain,
@@ -210,6 +210,12 @@ void Swapchain::SetSurfaceProperties() {
     if (!(capabilities.supportedTransforms & transform)) {
         transform = capabilities.currentTransform;
     }
+
+    // Opaque is not supported everywhere.
+    composite_alpha = vk::CompositeAlphaFlagBitsKHR::eOpaque;
+    if (!(capabilities.supportedCompositeAlpha & vk::CompositeAlphaFlagBitsKHR::eOpaque)) {
+        composite_alpha = vk::CompositeAlphaFlagBitsKHR::eInherit;
+    }
 }
 
 void Swapchain::Destroy() {
@@ -237,14 +243,13 @@ void Swapchain::SetupImages() {
             .image = image,
             .viewType = vk::ImageViewType::e2D,
             .format = surface_format.format,
-            .subresourceRange =
-                {
-                    .aspectMask = vk::ImageAspectFlagBits::eColor,
-                    .baseMipLevel = 0,
-                    .levelCount = 1,
-                    .baseArrayLayer = 0,
-                    .layerCount = 1,
-                },
+            .subresourceRange{
+                .aspectMask = vk::ImageAspectFlagBits::eColor,
+                .baseMipLevel = 0,
+                .levelCount = 1,
+                .baseArrayLayer = 0,
+                .layerCount = 1,
+            },
         };
 
         image_views.push_back(device.createImageView(view_info));

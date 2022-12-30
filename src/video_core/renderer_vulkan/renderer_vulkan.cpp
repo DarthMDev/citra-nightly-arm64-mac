@@ -98,13 +98,12 @@ RendererVulkan::RendererVulkan(Frontend::EmuWindow& window, Frontend::EmuWindow*
     : RendererBase{window, secondary_window},
       telemetry_session{Core::System::GetInstance().TelemetrySession()},
       instance{window, Settings::values.physical_device.GetValue()}, scheduler{instance,
-                                                                               renderpass_cache,
-                                                                               *this},
+                                                                               renderpass_cache},
       renderpass_cache{instance, scheduler}, desc_manager{instance, scheduler},
       runtime{instance, scheduler, renderpass_cache, desc_manager}, swapchain{instance, scheduler,
                                                                               renderpass_cache},
-      vertex_buffer{
-          instance, scheduler, VERTEX_BUFFER_SIZE, vk::BufferUsageFlagBits::eVertexBuffer, {}},
+      vertex_buffer{instance, scheduler, vk::BufferUsageFlagBits::eVertexBuffer,
+                    VERTEX_BUFFER_SIZE},
       rasterizer{render_window, instance, scheduler, desc_manager, runtime, renderpass_cache} {
     Report();
     window.mailbox = nullptr;
@@ -601,7 +600,7 @@ void RendererVulkan::DrawSingleScreenRotated(u32 screen_id, float x, float y, fl
     const auto& texcoords = screen_info.display_texcoords;
 
     u32 size = sizeof(ScreenRectVertex) * 4;
-    auto [ptr, offset, invalidate] = vertex_buffer.Map(size);
+    auto [ptr, offset, invalidate] = vertex_buffer.Map(size, 16);
 
     const std::array vertices = {
         ScreenRectVertex{x, y, texcoords.bottom, texcoords.left},
@@ -633,7 +632,7 @@ void RendererVulkan::DrawSingleScreenRotated(u32 screen_id, float x, float y, fl
                                         vk::ShaderStageFlagBits::eVertex,
                                     0, sizeof(info), &info);
 
-        render_cmdbuf.bindVertexBuffers(0, vertex_buffer.GetHandle(), {0});
+        render_cmdbuf.bindVertexBuffers(0, vertex_buffer.Handle(), {0});
         render_cmdbuf.draw(4, 1, offset / sizeof(ScreenRectVertex), 0);
     });
 }
@@ -643,7 +642,7 @@ void RendererVulkan::DrawSingleScreen(u32 screen_id, float x, float y, float w, 
     const auto& texcoords = screen_info.display_texcoords;
 
     u32 size = sizeof(ScreenRectVertex) * 4;
-    auto [ptr, offset, invalidate] = vertex_buffer.Map(size);
+    auto [ptr, offset, invalidate] = vertex_buffer.Map(size, 16);
 
     const std::array vertices = {
         ScreenRectVertex{x, y, texcoords.bottom, texcoords.right},
@@ -672,7 +671,7 @@ void RendererVulkan::DrawSingleScreen(u32 screen_id, float x, float y, float w, 
                                         vk::ShaderStageFlagBits::eVertex,
                                     0, sizeof(info), &info);
 
-        render_cmdbuf.bindVertexBuffers(0, vertex_buffer.GetHandle(), {0});
+        render_cmdbuf.bindVertexBuffers(0, vertex_buffer.Handle(), {0});
         render_cmdbuf.draw(4, 1, offset / sizeof(ScreenRectVertex), 0);
     });
 }
@@ -683,7 +682,7 @@ void RendererVulkan::DrawSingleScreenStereoRotated(u32 screen_id_l, u32 screen_i
     const auto& texcoords = screen_info_l.display_texcoords;
 
     u32 size = sizeof(ScreenRectVertex) * 4;
-    auto [ptr, offset, invalidate] = vertex_buffer.Map(size);
+    auto [ptr, offset, invalidate] = vertex_buffer.Map(size, 16);
 
     const std::array vertices = {ScreenRectVertex{x, y, texcoords.bottom, texcoords.left},
                                  ScreenRectVertex{x + w, y, texcoords.bottom, texcoords.right},
@@ -712,7 +711,7 @@ void RendererVulkan::DrawSingleScreenStereoRotated(u32 screen_id_l, u32 screen_i
                                         vk::ShaderStageFlagBits::eVertex,
                                     0, sizeof(info), &info);
 
-        render_cmdbuf.bindVertexBuffers(0, vertex_buffer.GetHandle(), {0});
+        render_cmdbuf.bindVertexBuffers(0, vertex_buffer.Handle(), {0});
         render_cmdbuf.draw(4, 1, offset / sizeof(ScreenRectVertex), 0);
     });
 }
@@ -723,7 +722,7 @@ void RendererVulkan::DrawSingleScreenStereo(u32 screen_id_l, u32 screen_id_r, fl
     const auto& texcoords = screen_info_l.display_texcoords;
 
     u32 size = sizeof(ScreenRectVertex) * 4;
-    auto [ptr, offset, invalidate] = vertex_buffer.Map(size);
+    auto [ptr, offset, invalidate] = vertex_buffer.Map(size, 16);
 
     const std::array<ScreenRectVertex, 4> vertices = {{
         ScreenRectVertex(x, y, texcoords.bottom, texcoords.right),
@@ -754,7 +753,7 @@ void RendererVulkan::DrawSingleScreenStereo(u32 screen_id_l, u32 screen_id_r, fl
                                         vk::ShaderStageFlagBits::eVertex,
                                     0, sizeof(info), &info);
 
-        render_cmdbuf.bindVertexBuffers(0, vertex_buffer.GetHandle(), {0});
+        render_cmdbuf.bindVertexBuffers(0, vertex_buffer.Handle(), {0});
         render_cmdbuf.draw(4, 1, offset / sizeof(ScreenRectVertex), 0);
     });
 }
@@ -965,12 +964,6 @@ void RendererVulkan::SwapBuffers() {
     if (Pica::g_debug_context && Pica::g_debug_context->recorder) {
         Pica::g_debug_context->recorder->FrameFinished();
     }
-}
-
-void RendererVulkan::FlushBuffers() {
-    vertex_buffer.Flush();
-    rasterizer.FlushBuffers();
-    runtime.FlushBuffers();
 }
 
 void RendererVulkan::Report() const {

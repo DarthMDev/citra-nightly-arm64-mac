@@ -94,6 +94,7 @@ private:
     vk::PresentModeKHR present_mode;
     vk::Extent2D extent;
     vk::SurfaceTransformFlagBitsKHR transform;
+    vk::CompositeAlphaFlagBitsKHR composite_alpha;
     std::vector<vk::Image> images;
     std::vector<vk::ImageView> image_views;
     std::vector<vk::Framebuffer> framebuffers;

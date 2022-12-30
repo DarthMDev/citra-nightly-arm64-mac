@@ -95,7 +95,6 @@ add_library(video_core STATIC
     renderer_vulkan/vk_descriptor_manager.h
     renderer_vulkan/vk_format_reinterpreter.cpp
     renderer_vulkan/vk_format_reinterpreter.h
-    renderer_vulkan/vk_layout_tracker.h
     renderer_vulkan/vk_master_semaphore.cpp
     renderer_vulkan/vk_master_semaphore.h
     renderer_vulkan/vk_rasterizer.cpp
