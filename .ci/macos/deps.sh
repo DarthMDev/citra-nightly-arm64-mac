@@ -12,7 +12,12 @@ sudo cp -rv FFmpeg-shared-n5.0.1-OSX-universal/* /usr/local/
 # copy to /Users/runner/work/FFmpeg-macOS/FFmpeg-macOS/ffmpeg/install_universal
 mkdir -p /Users/runner/work/FFmpeg-macOS/FFmpeg-macOS/ffmpeg/install_universal
 sudo cp -rv FFmpeg-shared-n5.0.1-OSX-universal/* /Users/runner/work/FFmpeg-macOS/FFmpeg-macOS/ffmpeg/install_universal
-sudo port install openssl +universal openssl3 +universal glslang +universal moltenvk +universal vulkan-loader +universal libsdl2 +universal
+git clone https://github.com/MichaelGDev48/citra-dependencies-universal2
+cd citra-dependencies-universal2
+# install all .pkg dependencies
+for i in *.pkg; do sudo installer -pkg $i -target /opt/local; done
+cd ..
+# sudo port install openssl3 +universal glslang +universal moltenvk +universal vulkan-loader +universal libsdl2 +universal
 # grab qt5 universal2 binaries
 wget https://github.com/MichaelGDev48/qt5.15.2-universal-binaries/releases/download/1.0/Qt-5.15.2-universal.zip 
 unzip Qt-5.15.2-universal
@@ -24,7 +29,6 @@ export FFMPEG_VER=4.4
 mkdir tmp
 cd tmp/
 
-cd ../../..
 # install SDL
 # wget https://github.com/SachinVin/ext-macos-bin/raw/main/sdl2/sdl-${SDL_VER}.7z
 # 7z x sdl-${SDL_VER}.7z
