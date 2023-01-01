@@ -1548,7 +1548,7 @@ uint s = uint(last_tex_env_out.g * float(0xFF));
 ivec2 image_coord = ivec2(gl_FragCoord.xy);
 
 uint old = imageLoad(shadow_buffer, image_coord).x;
-uint new;
+uint new1;
 uint old2;
 do {
     old2 = old;
@@ -1562,9 +1562,9 @@ do {
             ref.y = min(s, ref.y);
         }
     }
-    new = EncodeShadow(ref);
+    new1 = EncodeShadow(ref);
 
-} while ((old = imageAtomicCompSwap(shadow_buffer, image_coord, old, new)) != old2);
+} while ((old = imageAtomicCompSwap(shadow_buffer, image_coord, old, new1)) != old2);
 )";
     } else {
         out += "gl_FragDepth = depth;\n";

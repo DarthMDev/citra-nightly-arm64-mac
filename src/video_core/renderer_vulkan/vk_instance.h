@@ -130,6 +130,11 @@ public:
         return index_type_uint8;
     }
 
+    /// Returns true when VK_KHR_image_format_list is supported
+    bool IsImageFormatListSupported() const {
+        return image_format_list;
+    }
+
     /// Returns the vendor ID of the physical device
     u32 GetVendorID() const {
         return properties.vendorID;
@@ -233,6 +238,7 @@ private:
     bool push_descriptors{};
     bool custom_border_color{};
     bool index_type_uint8{};
+    bool image_format_list{};
     bool enable_validation{};
     bool dump_command_buffers{};
 };

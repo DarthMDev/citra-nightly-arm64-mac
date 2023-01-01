@@ -5,18 +5,17 @@
 #include <utility>
 #include "common/microprofile.h"
 #include "common/settings.h"
-#include "video_core/renderer_vulkan/renderer_vulkan.h"
 #include "video_core/renderer_vulkan/vk_instance.h"
+#include "video_core/renderer_vulkan/vk_renderpass_cache.h"
 #include "video_core/renderer_vulkan/vk_scheduler.h"
 
 namespace Vulkan {
 
-void Scheduler::CommandChunk::ExecuteAll(vk::CommandBuffer render_cmdbuf,
-                                         vk::CommandBuffer upload_cmdbuf) {
+void Scheduler::CommandChunk::ExecuteAll(vk::CommandBuffer cmdbuf) {
     auto command = first;
     while (command != nullptr) {
         auto next = command->GetNext();
-        command->Execute(render_cmdbuf, upload_cmdbuf);
+        command->Execute(cmdbuf);
         command->~Command();
         command = next;
     }
@@ -109,7 +108,7 @@ void Scheduler::WorkerThread() {
             work_queue.pop();
 
             has_submit = work->HasSubmit();
-            work->ExecuteAll(render_cmdbuf, upload_cmdbuf);
+            work->ExecuteAll(current_cmdbuf);
         }
         if (has_submit) {
             AllocateWorkerCommandBuffers();
@@ -121,13 +120,11 @@ void Scheduler::WorkerThread() {
 
 void Scheduler::AllocateWorkerCommandBuffers() {
     const vk::CommandBufferBeginInfo begin_info = {
-        .flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit};
+        .flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit,
+    };
 
-    upload_cmdbuf = command_pool.Commit();
-    upload_cmdbuf.begin(begin_info);
-
-    render_cmdbuf = command_pool.Commit();
-    render_cmdbuf.begin(begin_info);
+    current_cmdbuf = command_pool.Commit();
+    current_cmdbuf.begin(begin_info);
 }
 
 MICROPROFILE_DEFINE(Vulkan_Submit, "Vulkan", "Submit Exectution", MP_RGB(255, 192, 255));
@@ -138,10 +135,9 @@ void Scheduler::SubmitExecution(vk::Semaphore signal_semaphore, vk::Semaphore wa
 
     renderpass_cache.ExitRenderpass();
     Record([signal_semaphore, wait_semaphore, handle, signal_value,
-            this](vk::CommandBuffer render_cmdbuf, vk::CommandBuffer upload_cmdbuf) {
+            this](vk::CommandBuffer cmdbuf) {
         MICROPROFILE_SCOPE(Vulkan_Submit);
-        upload_cmdbuf.end();
-        render_cmdbuf.end();
+        cmdbuf.end();
 
         const u32 num_signal_semaphores = signal_semaphore ? 2U : 1U;
         const std::array signal_values{signal_value, u64(0)};
@@ -163,14 +159,13 @@ void Scheduler::SubmitExecution(vk::Semaphore signal_semaphore, vk::Semaphore wa
             .pSignalSemaphoreValues = signal_values.data(),
         };
 
-        const std::array cmdbuffers = {upload_cmdbuf, render_cmdbuf};
         const vk::SubmitInfo submit_info = {
             .pNext = &timeline_si,
             .waitSemaphoreCount = num_wait_semaphores,
             .pWaitSemaphores = wait_semaphores.data(),
             .pWaitDstStageMask = wait_stage_masks.data(),
-            .commandBufferCount = static_cast<u32>(cmdbuffers.size()),
-            .pCommandBuffers = cmdbuffers.data(),
+            .commandBufferCount = 1u,
+            .pCommandBuffers = &cmdbuf,
             .signalSemaphoreCount = num_signal_semaphores,
             .pSignalSemaphores = signal_semaphores.data(),
         };

@@ -132,8 +132,8 @@ void DescriptorManager::BindDescriptorSets() {
         bound_sets[i] = descriptor_sets[i];
     }
 
-    scheduler.Record([this, bound_sets](vk::CommandBuffer render_cmdbuf, vk::CommandBuffer) {
-        render_cmdbuf.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipeline_layout, 0,
+    scheduler.Record([this, bound_sets](vk::CommandBuffer cmdbuf) {
+        cmdbuf.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipeline_layout, 0,
                                          bound_sets, {});
     });
 

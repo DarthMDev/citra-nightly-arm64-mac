@@ -165,8 +165,7 @@ void D24S8toRGBA8::Reinterpret(Surface& source, VideoCore::Rect2D src_rect, Surf
 
     runtime.GetRenderpassCache().ExitRenderpass();
     scheduler.Record([this, set, src_rect, src_image = source.alloc.image,
-                      dst_image = dest.alloc.image](vk::CommandBuffer render_cmdbuf,
-                                                    vk::CommandBuffer) {
+                      dst_image = dest.alloc.image](vk::CommandBuffer cmdbuf) {
         const vk::ImageMemoryBarrier pre_barrier = {
             .srcAccessMask = vk::AccessFlagBits::eShaderWrite |
                              vk::AccessFlagBits::eDepthStencilAttachmentWrite |
@@ -221,21 +220,21 @@ void D24S8toRGBA8::Reinterpret(Surface& source, VideoCore::Rect2D src_rect, Surf
                 },
             }};
 
-        render_cmdbuf.pipelineBarrier(vk::PipelineStageFlagBits::eAllCommands,
+        cmdbuf.pipelineBarrier(vk::PipelineStageFlagBits::eAllCommands,
                                       vk::PipelineStageFlagBits::eComputeShader,
                                       vk::DependencyFlagBits::eByRegion, {}, {}, pre_barrier);
 
-        render_cmdbuf.bindDescriptorSets(vk::PipelineBindPoint::eCompute, compute_pipeline_layout,
+        cmdbuf.bindDescriptorSets(vk::PipelineBindPoint::eCompute, compute_pipeline_layout,
                                          0, set, {});
-        render_cmdbuf.bindPipeline(vk::PipelineBindPoint::eCompute, compute_pipeline);
+        cmdbuf.bindPipeline(vk::PipelineBindPoint::eCompute, compute_pipeline);
 
         const auto src_offset = Common::MakeVec(src_rect.left, src_rect.bottom);
-        render_cmdbuf.pushConstants(compute_pipeline_layout, vk::ShaderStageFlagBits::eCompute, 0,
+        cmdbuf.pushConstants(compute_pipeline_layout, vk::ShaderStageFlagBits::eCompute, 0,
                                     sizeof(Common::Vec2i), src_offset.AsArray());
 
-        render_cmdbuf.dispatch(src_rect.GetWidth() / 8, src_rect.GetHeight() / 8, 1);
+        cmdbuf.dispatch(src_rect.GetWidth() / 8, src_rect.GetHeight() / 8, 1);
 
-        render_cmdbuf.pipelineBarrier(vk::PipelineStageFlagBits::eComputeShader,
+        cmdbuf.pipelineBarrier(vk::PipelineStageFlagBits::eComputeShader,
                                       vk::PipelineStageFlagBits::eAllCommands,
                                       vk::DependencyFlagBits::eByRegion, {}, {}, post_barriers);
     });

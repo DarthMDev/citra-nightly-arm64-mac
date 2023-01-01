@@ -398,6 +398,7 @@ bool Instance::CreateDevice() {
     push_descriptors = AddExtension(VK_KHR_PUSH_DESCRIPTOR_EXTENSION_NAME);
     custom_border_color = AddExtension(VK_EXT_CUSTOM_BORDER_COLOR_EXTENSION_NAME);
     index_type_uint8 = AddExtension(VK_EXT_INDEX_TYPE_UINT8_EXTENSION_NAME);
+    image_format_list = AddExtension(VK_KHR_IMAGE_FORMAT_LIST_EXTENSION_NAME);
 
     // Search queue families for graphics and present queues
     auto family_properties = physical_device.getQueueFamilyProperties();
@@ -475,7 +476,7 @@ bool Instance::CreateDevice() {
         feature_chain.get<vk::PhysicalDeviceTimelineSemaphoreFeaturesKHR>(),
         feature_chain.get<vk::PhysicalDeviceIndexTypeUint8FeaturesEXT>(),
         feature_chain.get<vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT>(),
-        feature_chain.get<vk::PhysicalDeviceCustomBorderColorFeaturesEXT>(),
+        feature_chain.get<vk::PhysicalDeviceCustomBorderColorFeaturesEXT>()
     };
 
     if (!extended_dynamic_state) {
@@ -490,14 +491,12 @@ bool Instance::CreateDevice() {
         device_chain.unlink<vk::PhysicalDeviceIndexTypeUint8FeaturesEXT>();
     }
 
-#if VK_KHR_portability_subset
     const vk::StructureChain portability_chain =
         physical_device.getFeatures2<vk::PhysicalDeviceFeatures2,
                                      vk::PhysicalDevicePortabilitySubsetFeaturesKHR>();
     const vk::PhysicalDevicePortabilitySubsetFeaturesKHR portability_features =
         portability_chain.get<vk::PhysicalDevicePortabilitySubsetFeaturesKHR>();
     triangle_fan_supported = portability_features.triangleFans;
-#endif
 
     try {
         device = physical_device.createDevice(device_chain.get());

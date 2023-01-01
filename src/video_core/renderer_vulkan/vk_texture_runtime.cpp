@@ -223,7 +223,15 @@ ImageAlloc TextureRuntime::Allocate(u32 width, u32 height, VideoCore::PixelForma
         flags |= vk::ImageCreateFlagBits::eMutableFormat;
     }
 
+    const bool need_format_list = create_storage_view && instance.IsImageFormatListSupported();
+    const vk::Format storage_format = vk::Format::eR32Uint;
+    const vk::ImageFormatListCreateInfo image_format_list = {
+        .viewFormatCount = 1,
+        .pViewFormats = &storage_format,
+    };
+
     const vk::ImageCreateInfo image_info = {
+        .pNext = need_format_list ? &image_format_list : nullptr,
         .flags = flags,
         .imageType = vk::ImageType::e2D,
         .format = format,
@@ -327,8 +335,7 @@ ImageAlloc TextureRuntime::Allocate(u32 width, u32 height, VideoCore::PixelForma
         alloc.storage_view = device.createImageView(storage_view_info);
     }
 
-    scheduler.Record([image = alloc.image, aspect = alloc.aspect](vk::CommandBuffer,
-                                                                  vk::CommandBuffer upload_cmdbuf) {
+    scheduler.Record([image = alloc.image, aspect = alloc.aspect](vk::CommandBuffer cmdbuf) {
         const vk::ImageMemoryBarrier init_barrier = {
             .srcAccessMask = vk::AccessFlagBits::eNone,
             .dstAccessMask = vk::AccessFlagBits::eNone,
@@ -346,7 +353,7 @@ ImageAlloc TextureRuntime::Allocate(u32 width, u32 height, VideoCore::PixelForma
             },
         };
 
-        upload_cmdbuf.pipelineBarrier(vk::PipelineStageFlagBits::eTopOfPipe,
+        cmdbuf.pipelineBarrier(vk::PipelineStageFlagBits::eTopOfPipe,
                                       vk::PipelineStageFlagBits::eTopOfPipe,
                                       vk::DependencyFlagBits::eByRegion, {}, {}, init_barrier);
     });
@@ -406,8 +413,7 @@ bool TextureRuntime::ClearTexture(Surface& surface, const VideoCore::TextureClea
     };
 
     if (clear.texture_rect == surface.GetScaledRect()) {
-        scheduler.Record([params, clear, value](vk::CommandBuffer render_cmdbuf,
-                                                vk::CommandBuffer) {
+        scheduler.Record([params, clear, value](vk::CommandBuffer cmdbuf) {
             const vk::ImageSubresourceRange range = {
                 .aspectMask = params.aspect,
                 .baseMipLevel = clear.texture_level,
@@ -450,23 +456,23 @@ bool TextureRuntime::ClearTexture(Surface& surface, const VideoCore::TextureClea
                 },
             };
 
-            render_cmdbuf.pipelineBarrier(params.pipeline_flags,
+            cmdbuf.pipelineBarrier(params.pipeline_flags,
                                           vk::PipelineStageFlagBits::eTransfer,
                                           vk::DependencyFlagBits::eByRegion, {}, {}, pre_barrier);
 
             const bool is_color =
                 static_cast<bool>(params.aspect & vk::ImageAspectFlagBits::eColor);
             if (is_color) {
-                render_cmdbuf.clearColorImage(params.src_image,
+                cmdbuf.clearColorImage(params.src_image,
                                               vk::ImageLayout::eTransferDstOptimal,
                                               MakeClearColorValue(value), range);
             } else {
-                render_cmdbuf.clearDepthStencilImage(params.src_image,
+                cmdbuf.clearDepthStencilImage(params.src_image,
                                                      vk::ImageLayout::eTransferDstOptimal,
                                                      MakeClearDepthStencilValue(value), range);
             }
 
-            render_cmdbuf.pipelineBarrier(vk::PipelineStageFlagBits::eTransfer,
+            cmdbuf.pipelineBarrier(vk::PipelineStageFlagBits::eTransfer,
                                           params.pipeline_flags, vk::DependencyFlagBits::eByRegion,
                                           {}, {}, post_barrier);
         });
@@ -525,8 +531,7 @@ void TextureRuntime::ClearTextureWithRenderpass(Surface& surface,
         .src_image = surface.alloc.image,
     };
 
-    scheduler.Record([params, level = clear.texture_level](vk::CommandBuffer render_cmdbuf,
-                                                           vk::CommandBuffer) {
+    scheduler.Record([params, level = clear.texture_level](vk::CommandBuffer cmdbuf) {
         const vk::ImageMemoryBarrier pre_barrier = {
             .srcAccessMask = params.src_access,
             .dstAccessMask = vk::AccessFlagBits::eTransferWrite,
@@ -544,15 +549,14 @@ void TextureRuntime::ClearTextureWithRenderpass(Surface& surface,
             },
         };
 
-        render_cmdbuf.pipelineBarrier(params.pipeline_flags, vk::PipelineStageFlagBits::eTransfer,
+        cmdbuf.pipelineBarrier(params.pipeline_flags, vk::PipelineStageFlagBits::eTransfer,
                                       vk::DependencyFlagBits::eByRegion, {}, {}, pre_barrier);
     });
 
     renderpass_cache.EnterRenderpass(clear_info);
     renderpass_cache.ExitRenderpass();
 
-    scheduler.Record([params, level = clear.texture_level](vk::CommandBuffer render_cmdbuf,
-                                                           vk::CommandBuffer) {
+    scheduler.Record([params, level = clear.texture_level](vk::CommandBuffer cmdbuf) {
         const vk::ImageMemoryBarrier post_barrier = {
             .srcAccessMask = vk::AccessFlagBits::eTransferWrite,
             .dstAccessMask = params.src_access,
@@ -570,7 +574,7 @@ void TextureRuntime::ClearTextureWithRenderpass(Surface& surface,
             },
         };
 
-        render_cmdbuf.pipelineBarrier(vk::PipelineStageFlagBits::eTransfer, params.pipeline_flags,
+        cmdbuf.pipelineBarrier(vk::PipelineStageFlagBits::eTransfer, params.pipeline_flags,
                                       vk::DependencyFlagBits::eByRegion, {}, {}, post_barrier);
     });
 }
@@ -589,7 +593,7 @@ bool TextureRuntime::CopyTextures(Surface& source, Surface& dest,
         .dst_image = dest.alloc.image,
     };
 
-    scheduler.Record([params, copy](vk::CommandBuffer render_cmdbuf, vk::CommandBuffer) {
+    scheduler.Record([params, copy](vk::CommandBuffer cmdbuf) {
         const vk::ImageCopy image_copy = {
             .srcSubresource{
                 .aspectMask = params.aspect,
@@ -679,13 +683,13 @@ bool TextureRuntime::CopyTextures(Surface& source, Surface& dest,
             },
         };
 
-        render_cmdbuf.pipelineBarrier(params.pipeline_flags, vk::PipelineStageFlagBits::eTransfer,
+        cmdbuf.pipelineBarrier(params.pipeline_flags, vk::PipelineStageFlagBits::eTransfer,
                                       vk::DependencyFlagBits::eByRegion, {}, {}, pre_barriers);
 
-        render_cmdbuf.copyImage(params.src_image, vk::ImageLayout::eTransferSrcOptimal,
+        cmdbuf.copyImage(params.src_image, vk::ImageLayout::eTransferSrcOptimal,
                                 params.dst_image, vk::ImageLayout::eTransferDstOptimal, image_copy);
 
-        render_cmdbuf.pipelineBarrier(vk::PipelineStageFlagBits::eTransfer, params.pipeline_flags,
+        cmdbuf.pipelineBarrier(vk::PipelineStageFlagBits::eTransfer, params.pipeline_flags,
                                       vk::DependencyFlagBits::eByRegion, {}, {}, post_barriers);
     });
 
@@ -706,7 +710,7 @@ bool TextureRuntime::BlitTextures(Surface& source, Surface& dest,
         .dst_image = dest.alloc.image,
     };
 
-    scheduler.Record([params, blit](vk::CommandBuffer render_cmdbuf, vk::CommandBuffer) {
+    scheduler.Record([params, blit](vk::CommandBuffer cmdbuf) {
         const std::array source_offsets = {
             vk::Offset3D{static_cast<s32>(blit.src_rect.left),
                          static_cast<s32>(blit.src_rect.bottom), 0},
@@ -807,14 +811,14 @@ bool TextureRuntime::BlitTextures(Surface& source, Surface& dest,
             },
         };
 
-        render_cmdbuf.pipelineBarrier(params.pipeline_flags, vk::PipelineStageFlagBits::eTransfer,
+        cmdbuf.pipelineBarrier(params.pipeline_flags, vk::PipelineStageFlagBits::eTransfer,
                                       vk::DependencyFlagBits::eByRegion, {}, {}, read_barriers);
 
-        render_cmdbuf.blitImage(params.src_image, vk::ImageLayout::eTransferSrcOptimal,
+        cmdbuf.blitImage(params.src_image, vk::ImageLayout::eTransferSrcOptimal,
                                 params.dst_image, vk::ImageLayout::eTransferDstOptimal, blit_area,
                                 params.filter);
 
-        render_cmdbuf.pipelineBarrier(vk::PipelineStageFlagBits::eTransfer, params.pipeline_flags,
+        cmdbuf.pipelineBarrier(vk::PipelineStageFlagBits::eTransfer, params.pipeline_flags,
                                       vk::DependencyFlagBits::eByRegion, {}, {}, write_barriers);
     });
 
@@ -932,7 +936,7 @@ void Surface::Upload(const VideoCore::BufferTextureCopy& upload, const StagingDa
         };
 
         scheduler.Record([format = alloc.format, params, staging,
-                          upload](vk::CommandBuffer render_cmdbuf, vk::CommandBuffer) {
+                          upload](vk::CommandBuffer cmdbuf) {
             u32 num_copies = 1;
             std::array<vk::BufferImageCopy, 2> buffer_image_copies;
 
@@ -994,15 +998,15 @@ void Surface::Upload(const VideoCore::BufferTextureCopy& upload, const StagingDa
                 },
             };
 
-            render_cmdbuf.pipelineBarrier(params.pipeline_flags,
+            cmdbuf.pipelineBarrier(params.pipeline_flags,
                                           vk::PipelineStageFlagBits::eTransfer,
                                           vk::DependencyFlagBits::eByRegion, {}, {}, read_barrier);
 
-            render_cmdbuf.copyBufferToImage(staging.buffer, params.src_image,
+            cmdbuf.copyBufferToImage(staging.buffer, params.src_image,
                                             vk::ImageLayout::eTransferDstOptimal, num_copies,
                                             buffer_image_copies.data());
 
-            render_cmdbuf.pipelineBarrier(vk::PipelineStageFlagBits::eTransfer,
+            cmdbuf.pipelineBarrier(vk::PipelineStageFlagBits::eTransfer,
                                           params.pipeline_flags, vk::DependencyFlagBits::eByRegion,
                                           {}, {}, write_barrier);
         });
@@ -1037,8 +1041,7 @@ void Surface::Download(const VideoCore::BufferTextureCopy& download, const Stagi
             .src_image = alloc.image,
         };
 
-        scheduler.Record([params, staging, download](vk::CommandBuffer render_cmdbuf,
-                                                     vk::CommandBuffer) {
+        scheduler.Record([params, staging, download](vk::CommandBuffer cmdbuf) {
             const VideoCore::Rect2D rect = download.texture_rect;
             const vk::BufferImageCopy buffer_image_copy = {
                 .bufferOffset = staging.buffer_offset + download.buffer_offset,
@@ -1091,14 +1094,14 @@ void Surface::Download(const VideoCore::BufferTextureCopy& download, const Stagi
                 .dstAccessMask = vk::AccessFlagBits::eMemoryRead | vk::AccessFlagBits::eMemoryWrite,
             };
 
-            render_cmdbuf.pipelineBarrier(params.pipeline_flags,
+            cmdbuf.pipelineBarrier(params.pipeline_flags,
                                           vk::PipelineStageFlagBits::eTransfer,
                                           vk::DependencyFlagBits::eByRegion, {}, {}, read_barrier);
 
-            render_cmdbuf.copyImageToBuffer(params.src_image, vk::ImageLayout::eTransferSrcOptimal,
+            cmdbuf.copyImageToBuffer(params.src_image, vk::ImageLayout::eTransferSrcOptimal,
                                             staging.buffer, buffer_image_copy);
 
-            render_cmdbuf.pipelineBarrier(vk::PipelineStageFlagBits::eTransfer,
+            cmdbuf.pipelineBarrier(vk::PipelineStageFlagBits::eTransfer,
                                           params.pipeline_flags, vk::DependencyFlagBits::eByRegion,
                                           memory_write_barrier, {}, image_write_barrier);
         });

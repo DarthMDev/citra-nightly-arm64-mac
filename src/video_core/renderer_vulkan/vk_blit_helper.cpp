@@ -167,8 +167,7 @@ void BlitHelper::BlitD24S8ToR32(Surface& source, Surface& dest,
     device.updateDescriptorSetWithTemplate(set, update_template, textures[0]);
 
     scheduler.Record([this, set, blit, src_image = source.alloc.image,
-                      dst_image = dest.alloc.image](vk::CommandBuffer render_cmdbuf,
-                                                    vk::CommandBuffer) {
+                      dst_image = dest.alloc.image](vk::CommandBuffer cmdbuf) {
         const std::array pre_barriers = {
             vk::ImageMemoryBarrier{
                 .srcAccessMask = vk::AccessFlagBits::eShaderWrite |
@@ -240,21 +239,21 @@ void BlitHelper::BlitD24S8ToR32(Surface& source, Surface& dest,
                     .layerCount = VK_REMAINING_ARRAY_LAYERS,
                 },
             }};
-        render_cmdbuf.pipelineBarrier(vk::PipelineStageFlagBits::eAllCommands,
+        cmdbuf.pipelineBarrier(vk::PipelineStageFlagBits::eAllCommands,
                                       vk::PipelineStageFlagBits::eComputeShader,
                                       vk::DependencyFlagBits::eByRegion, {}, {}, pre_barriers);
 
-        render_cmdbuf.bindDescriptorSets(vk::PipelineBindPoint::eCompute, compute_pipeline_layout,
+        cmdbuf.bindDescriptorSets(vk::PipelineBindPoint::eCompute, compute_pipeline_layout,
                                          0, set, {});
-        render_cmdbuf.bindPipeline(vk::PipelineBindPoint::eCompute, compute_pipeline);
+        cmdbuf.bindPipeline(vk::PipelineBindPoint::eCompute, compute_pipeline);
 
         const auto src_offset = Common::MakeVec(blit.src_rect.left, blit.src_rect.bottom);
-        render_cmdbuf.pushConstants(compute_pipeline_layout, vk::ShaderStageFlagBits::eCompute, 0,
+        cmdbuf.pushConstants(compute_pipeline_layout, vk::ShaderStageFlagBits::eCompute, 0,
                                     sizeof(Common::Vec2i), src_offset.AsArray());
 
-        render_cmdbuf.dispatch(blit.src_rect.GetWidth() / 8, blit.src_rect.GetHeight() / 8, 1);
+        cmdbuf.dispatch(blit.src_rect.GetWidth() / 8, blit.src_rect.GetHeight() / 8, 1);
 
-        render_cmdbuf.pipelineBarrier(vk::PipelineStageFlagBits::eComputeShader,
+        cmdbuf.pipelineBarrier(vk::PipelineStageFlagBits::eComputeShader,
                                       vk::PipelineStageFlagBits::eAllCommands,
                                       vk::DependencyFlagBits::eByRegion, {}, {}, post_barriers);
     });

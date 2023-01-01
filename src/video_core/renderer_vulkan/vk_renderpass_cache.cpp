@@ -95,9 +95,9 @@ void RenderpassCache::EnterRenderpass(const RenderpassState& state) {
     }
 
     scheduler.Record([should_end = bool(current_state.renderpass),
-                      state](vk::CommandBuffer render_cmdbuf, vk::CommandBuffer) {
+                      state](vk::CommandBuffer cmdbuf) {
         if (should_end) {
-            render_cmdbuf.endRenderPass();
+            cmdbuf.endRenderPass();
         }
 
         const vk::RenderPassBeginInfo renderpass_begin_info = {
@@ -108,7 +108,7 @@ void RenderpassCache::EnterRenderpass(const RenderpassState& state) {
             .pClearValues = &state.clear,
         };
 
-        render_cmdbuf.beginRenderPass(renderpass_begin_info, vk::SubpassContents::eInline);
+        cmdbuf.beginRenderPass(renderpass_begin_info, vk::SubpassContents::eInline);
     });
 
     if (is_dirty) {
@@ -123,9 +123,7 @@ void RenderpassCache::ExitRenderpass() {
         return;
     }
 
-    scheduler.Record(
-        [](vk::CommandBuffer render_cmdbuf, vk::CommandBuffer) { render_cmdbuf.endRenderPass(); });
-
+    scheduler.Record([](vk::CommandBuffer cmdbuf) { cmdbuf.endRenderPass(); });
     current_state = {};
 }
 

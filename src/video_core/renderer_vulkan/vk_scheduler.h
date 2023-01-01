@@ -53,7 +53,7 @@ public:
     template <typename T>
     void Record(T&& command) {
         if (!use_worker_thread) {
-            command(render_cmdbuf, upload_cmdbuf);
+            command(current_cmdbuf);
             return;
         }
 
@@ -103,8 +103,7 @@ private:
     public:
         virtual ~Command() = default;
 
-        virtual void Execute(vk::CommandBuffer render_cmdbuf,
-                             vk::CommandBuffer upload_cmdbuf) const = 0;
+        virtual void Execute(vk::CommandBuffer cmdbuf) const = 0;
 
         Command* GetNext() const {
             return next;
@@ -127,9 +126,8 @@ private:
         TypedCommand(TypedCommand&&) = delete;
         TypedCommand& operator=(TypedCommand&&) = delete;
 
-        void Execute(vk::CommandBuffer render_cmdbuf,
-                     vk::CommandBuffer upload_cmdbuf) const override {
-            command(render_cmdbuf, upload_cmdbuf);
+        void Execute(vk::CommandBuffer cmdbuf) const override {
+            command(cmdbuf);
         }
 
     private:
@@ -138,7 +136,7 @@ private:
 
     class CommandChunk final {
     public:
-        void ExecuteAll(vk::CommandBuffer render_cmdbuf, vk::CommandBuffer upload_cmdbuf);
+        void ExecuteAll(vk::CommandBuffer cmdbuf);
 
         template <typename T>
         bool Record(T& command) {
@@ -201,8 +199,7 @@ private:
     std::unique_ptr<CommandChunk> chunk;
     std::queue<std::unique_ptr<CommandChunk>> work_queue;
     std::vector<std::unique_ptr<CommandChunk>> chunk_reserve;
-    vk::CommandBuffer render_cmdbuf;
-    vk::CommandBuffer upload_cmdbuf;
+    vk::CommandBuffer current_cmdbuf;
     StateFlags state{};
     std::mutex reserve_mutex;
     std::mutex work_mutex;

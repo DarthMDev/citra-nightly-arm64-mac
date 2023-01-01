@@ -285,9 +285,10 @@ void RasterizerVulkan::SetupVertexArray(u32 vs_input_size, u32 vs_input_index_mi
     SetupFixedAttribs();
 
     // Bind the generated bindings
-    scheduler.Record([this, vertex_offsets = binding_offsets](vk::CommandBuffer render_cmdbuf,
-                                                              vk::CommandBuffer) {
-        render_cmdbuf.bindVertexBuffers(0, vertex_buffers, vertex_offsets);
+    scheduler.Record([this, binding_count = layout.binding_count, vertex_offsets = binding_offsets]
+                     (vk::CommandBuffer cmdbuf) {
+        cmdbuf.bindVertexBuffers(0, binding_count, vertex_buffers.data(),
+                                        vertex_offsets.data());
     });
 }
 
@@ -422,11 +423,11 @@ bool RasterizerVulkan::AccelerateDrawBatchInternal(bool is_indexed) {
         .is_indexed = is_indexed,
     };
 
-    scheduler.Record([params](vk::CommandBuffer render_cmdbuf, vk::CommandBuffer) {
+    scheduler.Record([params](vk::CommandBuffer cmdbuf) {
         if (params.is_indexed) {
-            render_cmdbuf.drawIndexed(params.vertex_count, 1, 0, params.vertex_offset, 0);
+            cmdbuf.drawIndexed(params.vertex_count, 1, 0, params.vertex_offset, 0);
         } else {
-            render_cmdbuf.draw(params.vertex_count, 1, 0, 0);
+            cmdbuf.draw(params.vertex_count, 1, 0, 0);
         }
     });
 
@@ -458,8 +459,8 @@ void RasterizerVulkan::SetupIndexArray() {
     stream_buffer.Commit(index_buffer_size);
 
     scheduler.Record([this, index_offset = index_offset,
-                      index_type = index_type](vk::CommandBuffer render_cmdbuf, vk::CommandBuffer) {
-        render_cmdbuf.bindIndexBuffer(stream_buffer.Handle(), index_offset, index_type);
+                      index_type = index_type](vk::CommandBuffer cmdbuf) {
+        cmdbuf.bindIndexBuffer(stream_buffer.Handle(), index_offset, index_type);
     });
 }
 
@@ -779,9 +780,9 @@ bool RasterizerVulkan::Draw(bool accelerate, bool is_indexed) {
             stream_buffer.Commit(vertex_size);
 
             scheduler.Record([this, vertices, base_vertex,
-                              offset = offset](vk::CommandBuffer render_cmdbuf, vk::CommandBuffer) {
-                render_cmdbuf.bindVertexBuffers(0, stream_buffer.Handle(), offset);
-                render_cmdbuf.draw(vertices, 1, base_vertex, 0);
+                              offset = offset](vk::CommandBuffer cmdbuf) {
+                cmdbuf.bindVertexBuffers(0, stream_buffer.Handle(), offset);
+                cmdbuf.draw(vertices, 1, base_vertex, 0);
             });
         }
     }
