@@ -32,6 +32,10 @@ python3 -m macpack.patcher $CITRA_STANDALONE_PATH -d "libs"
 VULKAN_LOADER_PATH=/opt/local
 MOLTENVK_PATH=/opt/local
 mkdir $BUNDLE_LIB_PATH
+# replace SDL2 with the universal2 version
+cp /opt/local/lib/libSDL2-2.0.dylib $BUNDLE_EXECUTABLE_PATH -d "../Frameworks"
+
+
 cp $VULKAN_LOADER_PATH/lib/libvulkan.dylib $BUNDLE_LIB_PATH
 cp $MOLTENVK_PATH/lib/libMoltenVK.dylib $BUNDLE_LIB_PATH
 cp -r $VULKAN_LOADER_PATH/share/vulkan $BUNDLE_RESOURCES_PATH
