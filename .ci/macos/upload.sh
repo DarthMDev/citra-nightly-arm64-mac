@@ -35,7 +35,9 @@ MOLTENVK_PATH=/opt/local
 mkdir $BUNDLE_LIB_PATH
 # replace SDL2 with the universal2 version , copy to frameworks directory
 cp /opt/local/lib/libSDL2-2.0.0.dylib $BUNDLE_FRAMEWORK_PATH
-
+#rename it to libSDL2-2.0
+rm $BUNDLE_FRAMEWORK_PATH/libSDL2-2.0.dylib
+mv $BUNDLE_FRAMEWORK_PATH/libSDL2-2.0.0.dylib $BUNDLE_FRAMEWORK_PATH/libSDL2-2.0.dylib
 cp $VULKAN_LOADER_PATH/lib/libvulkan.dylib $BUNDLE_LIB_PATH
 cp $MOLTENVK_PATH/lib/libMoltenVK.dylib $BUNDLE_LIB_PATH
 cp -r $VULKAN_LOADER_PATH/share/vulkan $BUNDLE_RESOURCES_PATH
