@@ -16,6 +16,7 @@ BUNDLE_PATH="$REV_NAME/citra-qt.app"
 BUNDLE_CONTENTS_PATH="$BUNDLE_PATH/Contents"
 BUNDLE_EXECUTABLE_PATH="$BUNDLE_CONTENTS_PATH/MacOS/citra-qt"
 BUNDLE_LIB_PATH="$BUNDLE_CONTENTS_PATH/lib"
+BUNDLE_FRAMEWORK_PATH="$BUNDLE_CONTENTS_PATH/Frameworks"
 BUNDLE_RESOURCES_PATH="$BUNDLE_CONTENTS_PATH/Resources"
 
 CITRA_STANDALONE_PATH="$REV_NAME/citra"
@@ -32,9 +33,8 @@ python3 -m macpack.patcher $CITRA_STANDALONE_PATH -d "libs"
 VULKAN_LOADER_PATH=/opt/local
 MOLTENVK_PATH=/opt/local
 mkdir $BUNDLE_LIB_PATH
-# replace SDL2 with the universal2 version
-cp /opt/local/lib/libSDL2-2.0.dylib $BUNDLE_EXECUTABLE_PATH -d "../Frameworks"
-
+# replace SDL2 with the universal2 version , copy to frameworks directory
+cp /opt/local/lib/libSDL2-2.0.dylib $BUNDLE_FRAMEWORK_PATH
 
 cp $VULKAN_LOADER_PATH/lib/libvulkan.dylib $BUNDLE_LIB_PATH
 cp $MOLTENVK_PATH/lib/libMoltenVK.dylib $BUNDLE_LIB_PATH
