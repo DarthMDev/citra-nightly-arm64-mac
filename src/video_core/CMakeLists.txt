@@ -111,6 +111,8 @@ add_library(video_core STATIC
     renderer_vulkan/vk_platform.h
     renderer_vulkan/vk_renderpass_cache.cpp
     renderer_vulkan/vk_renderpass_cache.h
+    renderer_vulkan/vk_shader_decompiler.cpp
+    renderer_vulkan/vk_shader_decompiler.h
     renderer_vulkan/vk_shader_gen.cpp
     renderer_vulkan/vk_shader_gen.h
     renderer_vulkan/vk_shader_gen_spv.cpp

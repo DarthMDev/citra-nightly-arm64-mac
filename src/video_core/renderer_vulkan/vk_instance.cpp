@@ -474,10 +474,14 @@ bool Instance::CreateDevice() {
             },
         },
         feature_chain.get<vk::PhysicalDeviceTimelineSemaphoreFeaturesKHR>(),
-        feature_chain.get<vk::PhysicalDeviceIndexTypeUint8FeaturesEXT>(),
         feature_chain.get<vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT>(),
-        feature_chain.get<vk::PhysicalDeviceCustomBorderColorFeaturesEXT>()
+        feature_chain.get<vk::PhysicalDeviceCustomBorderColorFeaturesEXT>(),
+        feature_chain.get<vk::PhysicalDeviceIndexTypeUint8FeaturesEXT>(),
     };
+
+    if (!index_type_uint8) {
+        device_chain.unlink<vk::PhysicalDeviceIndexTypeUint8FeaturesEXT>();
+    }
 
     if (!extended_dynamic_state) {
         device_chain.unlink<vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT>();
@@ -487,16 +491,14 @@ bool Instance::CreateDevice() {
         device_chain.unlink<vk::PhysicalDeviceCustomBorderColorFeaturesEXT>();
     }
 
-    if (!index_type_uint8) {
-        device_chain.unlink<vk::PhysicalDeviceIndexTypeUint8FeaturesEXT>();
-    }
-
+#if __APPLE__
     const vk::StructureChain portability_chain =
         physical_device.getFeatures2<vk::PhysicalDeviceFeatures2,
                                      vk::PhysicalDevicePortabilitySubsetFeaturesKHR>();
     const vk::PhysicalDevicePortabilitySubsetFeaturesKHR portability_features =
         portability_chain.get<vk::PhysicalDevicePortabilitySubsetFeaturesKHR>();
     triangle_fan_supported = portability_features.triangleFans;
+#endif
 
     try {
         device = physical_device.createDevice(device_chain.get());

@@ -948,7 +948,8 @@ void FragmentModule::DefineProcTexSampler() {
         const Id proctex_alpha_map_offset{GetShaderDataMember(i32_id, ConstS32(13))};
         const Id final_alpha{AppendProcTexCombineAndMap(config.state.proctex.alpha_combiner, u, v,
                                                         proctex_alpha_map_offset)};
-        final_color = OpCompositeConstruct(vec_ids.Get(4), final_color, final_alpha);
+        const Id final_color_xyz{OpVectorShuffle(vec_ids.Get(3), final_color, final_color, 0, 1, 2)};
+        final_color = OpCompositeConstruct(vec_ids.Get(4), final_color_xyz, final_alpha);
     }
 
     OpReturnValue(final_color);

@@ -118,18 +118,18 @@ void OGLSampler::Release() {
 }
 
 void OGLShader::Create(std::string_view source, GLenum type) {
-    if (handle != 0)
+    if (handle != 0 || source.empty()) {
         return;
-    if (source == nullptr)
-        return;
+    }
 
     MICROPROFILE_SCOPE(OpenGL_ResourceCreation);
     handle = LoadShader(source, type);
 }
 
 void OGLShader::Release() {
-    if (handle == 0)
+    if (handle == 0) {
         return;
+    }
 
     MICROPROFILE_SCOPE(OpenGL_ResourceDeletion);
     glDeleteShader(handle);
@@ -137,8 +137,9 @@ void OGLShader::Release() {
 }
 
 void OGLProgram::Create(bool separable_program, const std::vector<GLuint>& shaders) {
-    if (handle != 0)
+    if (handle != 0) {
         return;
+    }
 
     MICROPROFILE_SCOPE(OpenGL_ResourceCreation);
     handle = LoadProgram(separable_program, shaders);

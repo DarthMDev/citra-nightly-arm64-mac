@@ -222,18 +222,12 @@ bool TextureRuntime::ClearTexture(Surface& surface, const VideoCore::TextureClea
 
 bool TextureRuntime::CopyTextures(Surface& source, Surface& dest,
                                   const VideoCore::TextureCopy& copy) {
-    // Emulate texture copy with blit for now
-    const VideoCore::TextureBlit blit = {
-        .src_level = copy.src_level,
-        .dst_level = copy.dst_level,
-        .src_layer = copy.src_layer,
-        .dst_layer = copy.dst_layer,
-        .src_rect = {copy.src_offset.x, copy.src_offset.y + copy.extent.height,
-                     copy.src_offset.x + copy.extent.width, copy.src_offset.y},
-        .dst_rect = {copy.dst_offset.x, copy.dst_offset.y + copy.extent.height,
-                     copy.dst_offset.x + copy.extent.width, copy.dst_offset.y}};
-
-    return BlitTextures(source, dest, blit);
+    glCopyImageSubData(source.texture.handle, GL_TEXTURE_2D,
+                       copy.src_level, copy.src_offset.x, copy.src_offset.y, 0,
+                       dest.texture.handle, GL_TEXTURE_2D,
+                       copy.dst_level, copy.dst_offset.x, copy.dst_offset.y, 0,
+                       copy.extent.width, copy.extent.height, 1);
+    return true;
 }
 
 bool TextureRuntime::BlitTextures(Surface& source, Surface& dest,

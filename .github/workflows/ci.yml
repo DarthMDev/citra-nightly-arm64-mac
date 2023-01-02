@@ -123,6 +123,14 @@ jobs:
         shell: bash
       - name: Set up MSVC
         uses: ilammy/msvc-dev-cmd@v1
+      - name: Setup Vulkan SDK
+        uses: humbletim/setup-vulkan-sdk@v1.2.0
+        with:
+          vulkan-query-version: latest
+          vulkan-components: Glslang
+          vulkan-use-cache: true
+      - name: Test glslangValidator
+        run: glslangValidator --version
       - name: Build
         run: ./.ci/windows-msvc/build.sh
         shell: bash
