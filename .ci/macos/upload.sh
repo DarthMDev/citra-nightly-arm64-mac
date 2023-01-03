@@ -45,11 +45,11 @@ install_name_tool -add_rpath "@loader_path/../lib/" $BUNDLE_EXECUTABLE_PATH
 # one for frameworks as well
 install_name_tool -add_rpath "@loader_path/../Frameworks/" $BUNDLE_EXECUTABLE_PATH
 # ffmpeg libs to look in frameworks folder (located in frameworks folder)
-install_name_tool -add_rpath "@loader_path/../Frameworks/" $BUNDLE_FRAMEWORK_PATH/libavcodec.59.dylib
-install_name_tool -add_rpath "@loader_path/../Frameworks/" $BUNDLE_FRAMEWORK_PATH/libavformat.59.16.100.dylib
-install_name_tool -add_rpath "@loader_path/../Frameworks/" $BUNDLE_FRAMEWORK_PATH/libavutil.57.dylib
-install_name_tool -add_rpath "@loader_path/../Frameworks/" $BUNDLE_FRAMEWORK_PATH/libswresample.4.dylib
-install_name_tool -add_rpath "@loader_path/../Frameworks/" $BUNDLE_FRAMEWORK_PATH/libswscale.6.4.100.dylib
+# install_name_tool -add_rpath "@loader_path/../Frameworks/" $BUNDLE_FRAMEWORK_PATH/libavcodec.59.dylib
+# install_name_tool -add_rpath "@loader_path/../Frameworks/" $BUNDLE_FRAMEWORK_PATH/libavformat.59.16.100.dylib
+# install_name_tool -add_rpath "@loader_path/../Frameworks/" $BUNDLE_FRAMEWORK_PATH/libavutil.57.dylib
+# install_name_tool -add_rpath "@loader_path/../Frameworks/" $BUNDLE_FRAMEWORK_PATH/libswresample.4.dylib
+# install_name_tool -add_rpath "@loader_path/../Frameworks/" $BUNDLE_FRAMEWORK_PATH/libswscale.6.4.100.dylib
 
 # workaround for libc++
 install_name_tool -change @loader_path/../Frameworks/libc++.1.0.dylib /usr/lib/libc++.1.dylib $BUNDLE_EXECUTABLE_PATH
