@@ -492,12 +492,19 @@ bool Instance::CreateDevice() {
     }
 
 #if __APPLE__
-    const vk::StructureChain portability_chain =
+    const vk::StructureChain portability_features_chain =
         physical_device.getFeatures2<vk::PhysicalDeviceFeatures2,
                                      vk::PhysicalDevicePortabilitySubsetFeaturesKHR>();
     const vk::PhysicalDevicePortabilitySubsetFeaturesKHR portability_features =
-        portability_chain.get<vk::PhysicalDevicePortabilitySubsetFeaturesKHR>();
+        portability_features_chain.get<vk::PhysicalDevicePortabilitySubsetFeaturesKHR>();
     triangle_fan_supported = portability_features.triangleFans;
+
+    const vk::StructureChain portability_properties_chain =
+        physical_device.getProperties2<vk::PhysicalDeviceProperties2,
+                                       vk::PhysicalDevicePortabilitySubsetPropertiesKHR>();
+    const vk::PhysicalDevicePortabilitySubsetPropertiesKHR portability_properties =
+        portability_properties_chain.get<vk::PhysicalDevicePortabilitySubsetPropertiesKHR>();
+    min_vertex_stride_alignment = portability_properties.minVertexInputBindingStrideAlignment;
 #endif
 
     try {

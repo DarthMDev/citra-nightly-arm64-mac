@@ -216,6 +216,8 @@ void RasterizerVulkan::SetupVertexArray(u32 vs_input_size, u32 vs_input_index_mi
     const auto& vertex_attributes = regs.pipeline.vertex_attributes;
     PAddr base_address = vertex_attributes.GetPhysicalBaseAddress(); // GPUREG_ATTR_BUF_BASE
 
+    const u32 stride_alignment = instance.GetMinVertexStrideAlignment();
+
     VertexLayout& layout = pipeline_info.vertex_layout;
     layout.attribute_count = 0;
     layout.binding_count = 0;
@@ -262,20 +264,32 @@ void RasterizerVulkan::SetupVertexArray(u32 vs_input_size, u32 vs_input_index_mi
             base_address + loader.data_offset + (vs_input_index_min * loader.byte_count);
         const u32 vertex_num = vs_input_index_max - vs_input_index_min + 1;
         const u32 data_size = loader.byte_count * vertex_num;
-
         res_cache.FlushRegion(data_addr, data_size);
-        std::memcpy(array_ptr + buffer_offset, VideoCore::g_memory->GetPhysicalPointer(data_addr),
-                    data_size);
+
+        const u8* src_ptr = VideoCore::g_memory->GetPhysicalPointer(data_addr);
+        u8* dst_ptr = array_ptr + buffer_offset;
+
+        // Align stride up if required by Vulkan implementation.
+        const u32 aligned_stride =
+            Common::AlignUp(static_cast<u32>(loader.byte_count), stride_alignment);
+        if (aligned_stride == loader.byte_count) {
+            std::memcpy(dst_ptr, src_ptr, data_size);
+        } else {
+            for (size_t vertex = 0; vertex < vertex_num; vertex++) {
+                std::memcpy(dst_ptr + vertex * aligned_stride, src_ptr + vertex * loader.byte_count,
+                            loader.byte_count);
+            }
+        }
 
         // Create the binding associated with this loader
         VertexBinding& binding = layout.bindings[layout.binding_count];
         binding.binding.Assign(layout.binding_count);
         binding.fixed.Assign(0);
-        binding.stride.Assign(loader.byte_count);
+        binding.stride.Assign(aligned_stride);
 
         // Keep track of the binding offsets so we can bind the vertex buffer later
         binding_offsets[layout.binding_count++] = array_offset + buffer_offset;
-        buffer_offset += Common::AlignUp(data_size, 4);
+        buffer_offset += Common::AlignUp(aligned_stride * vertex_num, 4);
     }
 
     binding_offsets[layout.binding_count] = array_offset + buffer_offset;
@@ -392,7 +406,7 @@ bool RasterizerVulkan::AccelerateDrawBatchInternal(bool is_indexed) {
     const auto& regs = Pica::g_state.regs;
 
     const auto [vs_input_index_min, vs_input_index_max, vs_input_size] =
-        AnalyzeVertexArray(is_indexed);
+        AnalyzeVertexArray(is_indexed, instance.GetMinVertexStrideAlignment());
 
     if (regs.pipeline.triangle_topology == TriangleTopology::Fan &&
         !instance.IsTriangleFanSupported()) {

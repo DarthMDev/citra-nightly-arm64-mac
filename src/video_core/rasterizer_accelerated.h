@@ -122,7 +122,7 @@ protected:
     };
 
     /// Retrieve the range and the size of the input vertex
-    VertexArrayInfo AnalyzeVertexArray(bool is_indexed);
+    VertexArrayInfo AnalyzeVertexArray(bool is_indexed, u32 stride_alignment = 1);
 
 protected:
     std::array<u16, 0x30000> cached_pages{};

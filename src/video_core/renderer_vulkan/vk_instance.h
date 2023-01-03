@@ -195,6 +195,11 @@ public:
         return triangle_fan_supported;
     }
 
+    /// Returns the minimum vertex stride alignment
+    u32 GetMinVertexStrideAlignment() const {
+        return min_vertex_stride_alignment;
+    }
+
 private:
     /// Returns the optimal supported usage for the requested format
     vk::FormatFeatureFlags GetFormatFeatures(vk::Format format);
@@ -233,6 +238,7 @@ private:
     u32 graphics_queue_family_index{0};
 
     bool triangle_fan_supported{true};
+    u32 min_vertex_stride_alignment{1};
     bool timeline_semaphores{};
     bool extended_dynamic_state{};
     bool push_descriptors{};

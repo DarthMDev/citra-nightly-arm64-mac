@@ -180,7 +180,8 @@ void RasterizerAccelerated::ClearAll(bool flush) {
     cached_pages = {};
 }
 
-RasterizerAccelerated::VertexArrayInfo RasterizerAccelerated::AnalyzeVertexArray(bool is_indexed) {
+RasterizerAccelerated::VertexArrayInfo RasterizerAccelerated::AnalyzeVertexArray(
+    bool is_indexed, u32 stride_alignment) {
     const auto& regs = Pica::g_state.regs;
     const auto& vertex_attributes = regs.pipeline.vertex_attributes;
 
@@ -211,7 +212,9 @@ RasterizerAccelerated::VertexArrayInfo RasterizerAccelerated::AnalyzeVertexArray
     u32 vs_input_size = 0;
     for (const auto& loader : vertex_attributes.attribute_loaders) {
         if (loader.component_count != 0) {
-            vs_input_size += Common::AlignUp(loader.byte_count * vertex_num, 4);
+            const u32 aligned_stride =
+                Common::AlignUp(static_cast<u32>(loader.byte_count), stride_alignment);
+            vs_input_size += Common::AlignUp(aligned_stride * vertex_num, 4);
         }
     }
 
