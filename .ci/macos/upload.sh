@@ -42,6 +42,15 @@ cp $VULKAN_LOADER_PATH/lib/libvulkan.dylib $BUNDLE_LIB_PATH
 cp $MOLTENVK_PATH/lib/libMoltenVK.dylib $BUNDLE_LIB_PATH
 cp -r $VULKAN_LOADER_PATH/share/vulkan $BUNDLE_RESOURCES_PATH
 install_name_tool -add_rpath "@loader_path/../lib/" $BUNDLE_EXECUTABLE_PATH
+# one for frameworks as well
+install_name_tool -add_rpath "@loader_path/../Frameworks/" $BUNDLE_EXECUTABLE_PATH
+# ffmpeg libs to look in frameworks folder (located in frameworks folder)
+install_name_tool -add_rpath "@loader_path/../Frameworks/" $BUNDLE_FRAMEWORK_PATH/libavcodec.58.dylib
+install_name_tool -add_rpath "@loader_path/../Frameworks/" $BUNDLE_FRAMEWORK_PATH/libavformat.58.dylib
+install_name_tool -add_rpath "@loader_path/../Frameworks/" $BUNDLE_FRAMEWORK_PATH/libavutil.56.dylib
+install_name_tool -add_rpath "@loader_path/../Frameworks/" $BUNDLE_FRAMEWORK_PATH/libswresample.3.dylib
+install_name_tool -add_rpath "@loader_path/../Frameworks/" $BUNDLE_FRAMEWORK_PATH/libswscale.5.dylib
+
 # workaround for libc++
 install_name_tool -change @loader_path/../Frameworks/libc++.1.0.dylib /usr/lib/libc++.1.dylib $BUNDLE_EXECUTABLE_PATH
 install_name_tool -change @loader_path/libs/libc++.1.0.dylib /usr/lib/libc++.1.dylib $CITRA_STANDALONE_PATH
