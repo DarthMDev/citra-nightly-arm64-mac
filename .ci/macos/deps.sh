@@ -13,8 +13,19 @@ git clone https://github.com/MichaelGDev48/citra-dependencies-universal2
 cd citra-dependencies-universal2
 # install all .pkg dependencies
 for i in *.pkg; do sudo installer -pkg $i -target /opt/local; done
-# copy ffmpeg to /usr/local
-cp -rv $(pwd)/ffmpeg/* /usr/local
+cd ..
+git clone https://github.com/ColorsWind/FFmpeg-macOS.git build-script
+git clone https://github.com:FFmpeg/FFmpeg.git ffmpeg
+cd ffmpeg
+git checkout n5.0.1
+python ../build-script/make_compile.py 
+python ../build-script/make_universal.py
+cd ffmpeg
+git checkout n5.0.1
+python ../build-script/make_compile.py 
+python ../build-script/make_universal.py
+# copy install_universal folder to /usr/local
+sudo cp -rv install_universal/* /usr/local
 cd ..
 # sudo port install openssl3 +universal glslang +universal moltenvk +universal vulkan-loader +universal libsdl2 +universal
 # grab qt5 universal2 binaries
