@@ -15,7 +15,7 @@ cd citra-dependencies-universal2
 for i in *.pkg; do sudo installer -pkg $i -target /opt/local; done
 cd ..
 git clone https://github.com/ColorsWind/FFmpeg-macOS.git build-script
-git clone https://github.com/FFmpeg/FFmpeg.git ffmpeg
+git clone https://github.com:FFmpeg/FFmpeg.git ffmpeg
 cd ffmpeg
 git checkout n5.0.1
 python ../build-script/make_compile.py 
