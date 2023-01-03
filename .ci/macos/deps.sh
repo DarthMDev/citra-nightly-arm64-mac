@@ -18,10 +18,6 @@ git clone https://github.com/ColorsWind/FFmpeg-macOS.git build-script
 git clone https://github.com/FFmpeg/FFmpeg.git ffmpeg
 cd ffmpeg
 git checkout n5.0.1
-python ../build-script/make_compile.py 
-python ../build-script/make_universal.py
-cd ffmpeg
-git checkout n5.0.1
 python3 ../build-script/make_compile.py 
 python3 ../build-script/make_universal.py
 # copy install_universal folder to /usr/local
