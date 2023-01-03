@@ -22,8 +22,8 @@ python ../build-script/make_compile.py
 python ../build-script/make_universal.py
 cd ffmpeg
 git checkout n5.0.1
-python ../build-script/make_compile.py 
-python ../build-script/make_universal.py
+python3 ../build-script/make_compile.py 
+python3 ../build-script/make_universal.py
 # copy install_universal folder to /usr/local
 sudo cp -rv install_universal/* /usr/local
 cd ..
