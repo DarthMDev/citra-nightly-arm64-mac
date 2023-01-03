@@ -13,10 +13,7 @@ git clone https://github.com/MichaelGDev48/citra-dependencies-universal2
 cd citra-dependencies-universal2
 # install all .pkg dependencies
 for i in *.pkg; do sudo installer -pkg $i -target /opt/local; done
-# copy ffmpeg to /opt/local
-sudo mkdir -p /opt/local/install_universal
-sudo cp -rv $(pwd)/ffmpeg/* /opt/local/install_universal/
-sudo cp -rv $(pwd)/ffmpeg/* /usr/local
+
 cd ..
 # sudo port install openssl3 +universal glslang +universal moltenvk +universal vulkan-loader +universal libsdl2 +universal
 # grab qt5 universal2 binaries
