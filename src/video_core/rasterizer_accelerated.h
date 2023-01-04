@@ -85,6 +85,9 @@ protected:
     /// Syncs the shadow texture bias to match the PICA register
     void SyncShadowTextureBias();
 
+    /// Syncs the texture LOD bias to match the PICA register
+    void SyncTextureLodBias(int tex_index);
+
 protected:
     /// Structure that keeps tracks of the uniform state
     struct UniformBlockData {

@@ -34,7 +34,6 @@ struct SamplerInfo {
     u32 border_color = 0;
     float lod_min = 0;
     float lod_max = 0;
-    float lod_bias = 0;
 
     // TODO(wwylele): remove this once mipmap for cube is implemented
     bool supress_mipmap_for_cube = false;

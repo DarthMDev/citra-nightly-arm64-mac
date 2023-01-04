@@ -184,6 +184,10 @@ void RasterizerVulkan::SyncEntireState() {
     SyncProcTexBias();
     SyncShadowBias();
     SyncShadowTextureBias();
+
+    for (unsigned tex_index = 0; tex_index < 3; tex_index++) {
+        SyncTextureLodBias(tex_index);
+    }
 }
 
 void RasterizerVulkan::SyncFixedState() {
@@ -593,8 +597,7 @@ bool RasterizerVulkan::Draw(bool accelerate, bool is_indexed) {
             .wrap_t = config.wrap_t,
             .border_color = config.border_color.raw,
             .lod_min = skip_mipmap ? 0.f : static_cast<float>(config.lod.min_level),
-            .lod_max = skip_mipmap ? 0.f : static_cast<float>(config.lod.max_level),
-            .lod_bias = static_cast<float>(config.lod.bias),
+            .lod_max = skip_mipmap ? 0.f : static_cast<float>(config.lod.max_level)
         };
 
         // Search the cache and bind the appropriate sampler
@@ -1141,7 +1144,7 @@ vk::Sampler RasterizerVulkan::CreateSampler(const SamplerInfo& info) {
         .mipmapMode = PicaToVK::TextureMipFilterMode(info.mip_filter),
         .addressModeU = PicaToVK::WrapMode(info.wrap_s),
         .addressModeV = PicaToVK::WrapMode(info.wrap_t),
-        .mipLodBias = info.lod_bias / 256.0f,
+        .mipLodBias = 0,
         .anisotropyEnable = instance.IsAnisotropicFilteringSupported(),
         .maxAnisotropy = properties.limits.maxSamplerAnisotropy,
         .compareEnable = false,

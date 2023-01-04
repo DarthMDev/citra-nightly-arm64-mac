@@ -356,6 +356,7 @@ void Instance::CreateFormatTable() {
 bool Instance::CreateDevice() {
     const vk::StructureChain feature_chain =
         physical_device.getFeatures2<vk::PhysicalDeviceFeatures2,
+                                     vk::PhysicalDevicePortabilitySubsetFeaturesKHR,
                                      vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT,
                                      vk::PhysicalDeviceTimelineSemaphoreFeaturesKHR,
                                      vk::PhysicalDeviceCustomBorderColorFeaturesEXT,
@@ -393,6 +394,8 @@ bool Instance::CreateDevice() {
     };
 
     AddExtension(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
+    // According to the Vulkan spec, VK_KHR_portability_subset must be added if supported.
+    bool portability_subset = AddExtension(VK_KHR_PORTABILITY_SUBSET_EXTENSION_NAME);
     timeline_semaphores = AddExtension(VK_KHR_TIMELINE_SEMAPHORE_EXTENSION_NAME);
     extended_dynamic_state = AddExtension(VK_EXT_EXTENDED_DYNAMIC_STATE_EXTENSION_NAME);
     push_descriptors = AddExtension(VK_KHR_PUSH_DESCRIPTOR_EXTENSION_NAME);
@@ -473,11 +476,27 @@ bool Instance::CreateDevice() {
                 .shaderClipDistance = features.shaderClipDistance,
             },
         },
+        feature_chain.get<vk::PhysicalDevicePortabilitySubsetFeaturesKHR>(),
         feature_chain.get<vk::PhysicalDeviceTimelineSemaphoreFeaturesKHR>(),
         feature_chain.get<vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT>(),
         feature_chain.get<vk::PhysicalDeviceCustomBorderColorFeaturesEXT>(),
         feature_chain.get<vk::PhysicalDeviceIndexTypeUint8FeaturesEXT>(),
     };
+
+    if (portability_subset) {
+        const vk::PhysicalDevicePortabilitySubsetFeaturesKHR portability_features =
+            feature_chain.get<vk::PhysicalDevicePortabilitySubsetFeaturesKHR>();
+        triangle_fan_supported = portability_features.triangleFans;
+
+        const vk::StructureChain portability_properties_chain =
+            physical_device.getProperties2<vk::PhysicalDeviceProperties2,
+                                           vk::PhysicalDevicePortabilitySubsetPropertiesKHR>();
+        const vk::PhysicalDevicePortabilitySubsetPropertiesKHR portability_properties =
+            portability_properties_chain.get<vk::PhysicalDevicePortabilitySubsetPropertiesKHR>();
+        min_vertex_stride_alignment = portability_properties.minVertexInputBindingStrideAlignment;
+    } else {
+        device_chain.unlink<vk::PhysicalDevicePortabilitySubsetFeaturesKHR>();
+    }
 
     if (!index_type_uint8) {
         device_chain.unlink<vk::PhysicalDeviceIndexTypeUint8FeaturesEXT>();
@@ -490,22 +509,6 @@ bool Instance::CreateDevice() {
     if (!custom_border_color) {
         device_chain.unlink<vk::PhysicalDeviceCustomBorderColorFeaturesEXT>();
     }
-
-#if __APPLE__
-    const vk::StructureChain portability_features_chain =
-        physical_device.getFeatures2<vk::PhysicalDeviceFeatures2,
-                                     vk::PhysicalDevicePortabilitySubsetFeaturesKHR>();
-    const vk::PhysicalDevicePortabilitySubsetFeaturesKHR portability_features =
-        portability_features_chain.get<vk::PhysicalDevicePortabilitySubsetFeaturesKHR>();
-    triangle_fan_supported = portability_features.triangleFans;
-
-    const vk::StructureChain portability_properties_chain =
-        physical_device.getProperties2<vk::PhysicalDeviceProperties2,
-                                       vk::PhysicalDevicePortabilitySubsetPropertiesKHR>();
-    const vk::PhysicalDevicePortabilitySubsetPropertiesKHR portability_properties =
-        portability_properties_chain.get<vk::PhysicalDevicePortabilitySubsetPropertiesKHR>();
-    min_vertex_stride_alignment = portability_properties.minVertexInputBindingStrideAlignment;
-#endif
 
     try {
         device = physical_device.createDevice(device_chain.get());

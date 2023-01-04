@@ -643,6 +643,18 @@ void RasterizerAccelerated::NotifyPicaRegisterChanged(u32 id) {
         uniform_block_data.lighting_lut_dirty_any = true;
         break;
     }
+
+    // Texture LOD biases
+    case PICA_REG_INDEX(texturing.texture0.lod.bias):
+        SyncTextureLodBias(0);
+        break;
+    case PICA_REG_INDEX(texturing.texture1.lod.bias):
+        SyncTextureLodBias(1);
+        break;
+    case PICA_REG_INDEX(texturing.texture2.lod.bias):
+        SyncTextureLodBias(2);
+        break;
+
     default:
         // Forward registers that map to fixed function API features to the video backend
         NotifyFixedFunctionPicaRegisterChanged(id);
@@ -836,6 +848,15 @@ void RasterizerAccelerated::SyncShadowTextureBias() {
     int bias = Pica::g_state.regs.texturing.shadow.bias << 1;
     if (bias != uniform_block_data.data.shadow_texture_bias) {
         uniform_block_data.data.shadow_texture_bias = bias;
+        uniform_block_data.dirty = true;
+    }
+}
+
+void RasterizerAccelerated::SyncTextureLodBias(int tex_index) {
+    const auto pica_textures = Pica::g_state.regs.texturing.GetTextures();
+    const float bias = pica_textures[tex_index].config.lod.bias / 256.0f;
+    if (bias != uniform_block_data.data.tex_lod_bias[tex_index]) {
+        uniform_block_data.data.tex_lod_bias[tex_index] = bias;
         uniform_block_data.dirty = true;
     }
 }

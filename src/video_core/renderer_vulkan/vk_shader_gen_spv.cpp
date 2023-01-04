@@ -610,7 +610,7 @@ Id FragmentModule::SampleTexture(u32 texture_unit) {
     // This LOD formula is the same as the LOD lower limit defined in OpenGL.
     // f(x, y) >= max{m_u, m_v, m_w}
     // (See OpenGL 4.6 spec, 8.14.1 - Scale Factor and Level-of-Detail)
-    const auto SampleLod = [this](Id tex_id, Id tex_sampler_id, Id texcoord_id) {
+    const auto SampleLod = [this, texture_unit](Id tex_id, Id tex_sampler_id, Id texcoord_id) {
         const Id tex{OpLoad(image2d_id, tex_id)};
         const Id tex_sampler{OpLoad(sampler_id, tex_sampler_id)};
         const Id sampled_image{OpSampledImage(TypeSampledImage(image2d_id), tex, tex_sampler)};
@@ -624,8 +624,10 @@ Id FragmentModule::SampleTexture(u32 texture_unit) {
         const Id dx_dy_max{
             OpFMax(f32_id, OpCompositeExtract(f32_id, d, 0), OpCompositeExtract(f32_id, d, 1))};
         const Id lod{OpLog2(f32_id, dx_dy_max)};
+        const Id lod_bias{GetShaderDataMember(f32_id, ConstS32(29), ConstU32(texture_unit))};
+        const Id biased_lod{OpFAdd(f32_id, lod, lod_bias)};
         return OpImageSampleExplicitLod(vec_ids.Get(4), sampled_image, texcoord,
-                                        spv::ImageOperandsMask::Lod, lod);
+                                        spv::ImageOperandsMask::Lod, biased_lod);
     };
 
     const auto Sample = [this](Id tex_id, Id tex_sampler_id, bool projection) {
@@ -1342,12 +1344,12 @@ void FragmentModule::DefineUniformStructs() {
         i32_id, i32_id, f32_id, f32_id, f32_id, f32_id, i32_id, i32_id, i32_id, i32_id, i32_id,
         i32_id, i32_id, i32_id, i32_id, i32_id, f32_id, i32_id, u32_id, lighting_lut_array_id,
         vec_ids.Get(3), vec_ids.Get(2), vec_ids.Get(2), vec_ids.Get(2), vec_ids.Get(3),
-        light_src_array_id, const_color_array_id, vec_ids.Get(4), vec_ids.Get(4))};
+        light_src_array_id, const_color_array_id, vec_ids.Get(4), vec_ids.Get(4), vec_ids.Get(3))};
 
     constexpr std::array light_src_offsets{0u, 16u, 32u, 48u, 64u, 80u, 92u, 96u};
     constexpr std::array shader_data_offsets{
         0u,  4u,  8u,  12u, 16u, 20u,  24u,  28u,  32u,  36u,  40u,  44u,   48u,   52u,  56u,
-        60u, 64u, 68u, 72u, 80u, 176u, 192u, 200u, 208u, 224u, 240u, 1136u, 1232u, 1248u};
+        60u, 64u, 68u, 72u, 80u, 176u, 192u, 200u, 208u, 224u, 240u, 1136u, 1232u, 1248u, 1264u};
 
     Decorate(lighting_lut_array_id, spv::Decoration::ArrayStride, 16u);
     Decorate(light_src_array_id, spv::Decoration::ArrayStride, 112u);
