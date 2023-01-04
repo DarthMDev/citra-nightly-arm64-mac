@@ -13,7 +13,8 @@ git clone https://github.com/MichaelGDev48/citra-dependencies-universal2
 cd citra-dependencies-universal2
 # install all .pkg dependencies
 for i in *.pkg; do sudo installer -pkg $i -target /opt/local; done
-sudo cp vulkan/share/vulkan /opt/local/share/
+# copy directory
+sudo cp -rv vulkan/share/* /opt/local/share
 cd ..
 # sudo port install openssl3 +universal glslang +universal moltenvk +universal vulkan-loader +universal libsdl2 +universal
 # grab qt5 universal2 binaries
