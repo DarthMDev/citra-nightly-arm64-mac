@@ -42,3 +42,5 @@ repo/
 
 # GitHub Actions generated files
 node_modules/
+*.7z
+*.gz
