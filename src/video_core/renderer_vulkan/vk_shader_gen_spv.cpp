@@ -624,7 +624,7 @@ Id FragmentModule::SampleTexture(u32 texture_unit) {
         const Id dx_dy_max{
             OpFMax(f32_id, OpCompositeExtract(f32_id, d, 0), OpCompositeExtract(f32_id, d, 1))};
         const Id lod{OpLog2(f32_id, dx_dy_max)};
-        const Id lod_bias{GetShaderDataMember(f32_id, ConstS32(29), ConstU32(texture_unit))};
+        const Id lod_bias{GetShaderDataMember(f32_id, ConstS32(28), ConstU32(texture_unit))};
         const Id biased_lod{OpFAdd(f32_id, lod, lod_bias)};
         return OpImageSampleExplicitLod(vec_ids.Get(4), sampled_image, texcoord,
                                         spv::ImageOperandsMask::Lod, biased_lod);
@@ -1344,7 +1344,7 @@ void FragmentModule::DefineUniformStructs() {
         i32_id, i32_id, f32_id, f32_id, f32_id, f32_id, i32_id, i32_id, i32_id, i32_id, i32_id,
         i32_id, i32_id, i32_id, i32_id, i32_id, f32_id, i32_id, u32_id, lighting_lut_array_id,
         vec_ids.Get(3), vec_ids.Get(2), vec_ids.Get(2), vec_ids.Get(2), vec_ids.Get(3),
-        light_src_array_id, const_color_array_id, vec_ids.Get(4), vec_ids.Get(4), vec_ids.Get(3))};
+        light_src_array_id, const_color_array_id, vec_ids.Get(4), vec_ids.Get(3), vec_ids.Get(4))};
 
     constexpr std::array light_src_offsets{0u, 16u, 32u, 48u, 64u, 80u, 92u, 96u};
     constexpr std::array shader_data_offsets{

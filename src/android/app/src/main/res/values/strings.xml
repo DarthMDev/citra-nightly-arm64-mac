@@ -72,6 +72,11 @@
     <!-- Graphics settings strings -->
     <string name="renderer">Renderer</string>
     <string name="vsync">Enable V-Sync</string>
+    <string name="graphics_api">Graphics API</string>
+    <string name="spirv_shader_gen">Enable SPIR-V shader generation</string>
+    <string name="spirv_shader_gen_description">Emits the fragment shader used to emulate PICA using SPIR-V instead of GLSL</string>
+    <string name="renderer_debug">Enable debug renderer</string>
+    <string name="renderer_debug_description">Log additional graphics related debug information. When enabled, game performance will be significantly reduced</string>
     <string name="vsync_description">Synchronizes the game frame rate to the refresh rate of your device.</string>
     <string name="linear_filtering">Enable linear filtering</string>
     <string name="linear_filtering_description">Enables linear filtering, which causes game visuals to appear smoother.</string>

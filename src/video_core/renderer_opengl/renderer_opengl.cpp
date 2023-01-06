@@ -290,13 +290,8 @@ RendererOpenGL::~RendererOpenGL() = default;
 /// Initialize the renderer
 VideoCore::ResultStatus RendererOpenGL::Init() {
     const Vendor vendor = driver.GetVendor();
-    switch (vendor) {
-    case Vendor::Generic:
-        return VideoCore::ResultStatus::ErrorGenericDrivers;
-    case Vendor::Unknown:
-        return VideoCore::ResultStatus::ErrorRendererInit;
-    default:
-        break;
+    if (vendor == Vendor::Generic || vendor == Vendor::Unknown) {
+        LOG_WARNING(Render_OpenGL, "Unknown vendor: {}", driver.GetVendorString());
     }
 
     InitOpenGLObjects();

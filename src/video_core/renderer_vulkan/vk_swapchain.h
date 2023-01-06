@@ -22,7 +22,7 @@ public:
     ~Swapchain();
 
     /// Creates (or recreates) the swapchain with a given size.
-    void Create();
+    void Create(vk::SurfaceKHR new_surface = {});
 
     /// Acquires the next image in the swapchain.
     void AcquireNextImage();

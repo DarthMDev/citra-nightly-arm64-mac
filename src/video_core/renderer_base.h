@@ -37,6 +37,9 @@ public:
         TryPresent(timeout_ms, false);
     }
 
+    /// This is called to notify the rendering backend of a surface change
+    virtual void NotifySurfaceChanged() {}
+
     /// Prepares for video dumping (e.g. create necessary buffers, etc)
     virtual void PrepareVideoDumping() = 0;
 

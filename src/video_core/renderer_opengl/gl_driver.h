@@ -3,11 +3,19 @@
 // Refer to the license.txt file included.
 
 #pragma once
+
 #include <string_view>
 
 namespace OpenGL {
 
-enum class Vendor { Unknown = 0, AMD = 1, Nvidia = 2, Intel = 3, Generic = 4 };
+enum class Vendor {
+    Unknown = 0,
+    AMD = 1,
+    Nvidia = 2,
+    Intel = 3,
+    ARM = 4,
+    Generic = 5,
+};
 
 enum class DriverBug {
     // AMD drivers sometimes freezes when one shader stage is changed but not the others.
@@ -35,6 +43,11 @@ public:
     /// Returns the vendor of the currently selected physical device
     Vendor GetVendor() const {
         return vendor;
+    }
+
+    /// Returns the gpu vendor string returned by the driver
+    std::string_view GetVendorString() const {
+        return gpu_vendor;
     }
 
     /// Returns true if the current context is ES compatible

@@ -74,6 +74,7 @@ public:
     VideoCore::RasterizerInterface* Rasterizer() override;
     void ShutDown() override;
     void SwapBuffers() override;
+    void NotifySurfaceChanged() override;
     void TryPresent(int timeout_ms, bool is_secondary) override {}
     void PrepareVideoDumping() override {}
     void CleanupVideoDumping() override {}

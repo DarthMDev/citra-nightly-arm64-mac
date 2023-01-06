@@ -75,10 +75,11 @@ struct UniformData {
     LightSrc light_src[8];
     alignas(16) Common::Vec4f const_color[6]; // A vec4 color for each of the six tev stages
     alignas(16) Common::Vec4f tev_combiner_buffer_color;
+    alignas(16) Common::Vec3f tex_lod_bias;
     alignas(16) Common::Vec4f clip_coef;
 };
 
-static_assert(sizeof(UniformData) == 0x4F0,
+static_assert(sizeof(UniformData) == 0x500,
               "The size of the UniformData does not match the structure in the shader");
 static_assert(sizeof(UniformData) < 16384,
               "UniformData structure must be less than 16kb as per the OpenGL spec");

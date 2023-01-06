@@ -143,17 +143,20 @@ std::vector<const char*> GetInstanceExtensions(Frontend::WindowSystemType window
         extensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
     }
 
-    for (const char* extension : extensions) {
-        const auto iter =
+    // Sanitize extension list
+    std::erase_if(extensions, [&](const char* extension) -> bool {
+        const auto it =
             std::find_if(properties.begin(), properties.end(), [extension](const auto& prop) {
                 return std::strcmp(extension, prop.extensionName) == 0;
             });
 
-        if (iter == properties.end()) {
-            LOG_ERROR(Render_Vulkan, "Required instance extension {} is not available", extension);
-            return std::vector<const char*>{};
+        if (it == properties.end()) {
+            LOG_WARNING(Render_Vulkan,
+                        "Required instance extension {} is not available", extension);
+            return true;
         }
-    }
+        return false;
+    });
 
     return extensions;
 }

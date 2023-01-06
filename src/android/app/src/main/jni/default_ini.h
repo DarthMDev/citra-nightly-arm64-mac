@@ -98,9 +98,21 @@ use_cpu_jit =
 cpu_clock_percentage =
 
 [Renderer]
-# Whether to render using GLES or OpenGL
-# 0: OpenGL, 1 (default): GLES
-use_gles =
+# Whether to render using OpenGL or Vulkan
+# 1: OpenGL, 2 (default): Vulkan
+graphics_api =
+
+# Whether to emit PICA fragment shader using SPIRV or GLSL
+# 1: SPIR-V (default), 0: GLSL
+spirv_shader_gen =
+
+# Whether to use a worker thread for vulkan command buffer recording
+# 1: On (default), 0: Off
+async_command_recording =
+
+# Whether to enable additional debugging information during emulation
+# 1: On, 0 (default): Off
+renderer_debug =
 
 # Whether to use software or hardware rendering.
 # 0: Software, 1 (default): Hardware

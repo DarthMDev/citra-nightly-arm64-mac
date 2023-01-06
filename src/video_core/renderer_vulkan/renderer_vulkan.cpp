@@ -16,6 +16,7 @@
 #include "core/tracer/recorder.h"
 #include "video_core/debug_utils/debug_utils.h"
 #include "video_core/renderer_vulkan/renderer_vulkan.h"
+#include "video_core/renderer_vulkan/vk_platform.h"
 #include "video_core/renderer_vulkan/vk_shader_util.h"
 #include "video_core/video_core.h"
 
@@ -958,6 +959,11 @@ void RendererVulkan::SwapBuffers() {
     if (Pica::g_debug_context && Pica::g_debug_context->recorder) {
         Pica::g_debug_context->recorder->FrameFinished();
     }
+}
+
+void RendererVulkan::NotifySurfaceChanged() {
+    vk::SurfaceKHR new_surface = CreateSurface(instance.GetInstance(), render_window);
+    swapchain.Create(new_surface);
 }
 
 void RendererVulkan::Report() const {

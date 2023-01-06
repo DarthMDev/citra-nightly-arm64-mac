@@ -106,10 +106,7 @@ Instance::Instance(bool validation, bool dump_command_buffers)
     VULKAN_HPP_DEFAULT_DISPATCHER.init(vkGetInstanceProcAddr);
 
     // Enable the instance extensions the platform requires
-    auto extensions = GetInstanceExtensions(Frontend::WindowSystemType::Headless, false);
-
-    // Use required platform-specific flags
-    auto flags = GetInstanceFlags();
+    const std::vector extensions = GetInstanceExtensions(Frontend::WindowSystemType::Headless, false);
 
     const vk::ApplicationInfo application_info = {
         .pApplicationName = "Citra",
@@ -131,7 +128,7 @@ Instance::Instance(bool validation, bool dump_command_buffers)
 
     const vk::StructureChain instance_chain = {
         vk::InstanceCreateInfo{
-            .flags = flags,
+            .flags = GetInstanceFlags(),
             .pApplicationInfo = &application_info,
             .enabledLayerCount = layer_count,
             .ppEnabledLayerNames = layers.data(),
@@ -164,10 +161,7 @@ Instance::Instance(Frontend::EmuWindow& window, u32 physical_device_index)
     VULKAN_HPP_DEFAULT_DISPATCHER.init(vkGetInstanceProcAddr);
 
     // Enable the instance extensions the backend uses
-    auto extensions = GetInstanceExtensions(window_info.type, enable_validation);
-
-    // Use required platform-specific flags
-    auto flags = GetInstanceFlags();
+    const std::vector extensions = GetInstanceExtensions(window_info.type, enable_validation);
 
     // We require a Vulkan 1.1 driver
     const u32 available_version = vk::enumerateInstanceVersion();
@@ -199,9 +193,9 @@ Instance::Instance(Frontend::EmuWindow& window, u32 physical_device_index)
         layers[layer_count++] = "VK_LAYER_LUNARG_api_dump";
     }
 
-    const vk::StructureChain instance_chain = {
+    vk::StructureChain instance_chain = {
         vk::InstanceCreateInfo{
-            .flags = flags,
+            .flags = GetInstanceFlags(),
             .pApplicationInfo = &application_info,
             .enabledLayerCount = layer_count,
             .ppEnabledLayerNames = layers.data(),
@@ -221,9 +215,18 @@ Instance::Instance(Frontend::EmuWindow& window, u32 physical_device_index)
 
     surface = CreateSurface(instance, window);
 
-    // Calling this after CreateSurface to ensure the function has been loaded
+    // If validation is enabled attempt to also enable debug messenger
     if (enable_validation) {
-        debug_messenger = instance.createDebugUtilsMessengerEXT(MakeDebugUtilsMessengerInfo());
+        const auto it = std::find_if(extensions.begin(), extensions.end(), [](const char* extension) {
+            return std::strcmp(extension, VK_EXT_DEBUG_UTILS_EXTENSION_NAME) == 0;
+        });
+
+        const bool debug_messenger_supported = it != extensions.end();
+        if (debug_messenger_supported) {
+            debug_messenger = instance.createDebugUtilsMessengerEXT(MakeDebugUtilsMessengerInfo());
+        } else {
+            instance_chain.unlink<vk::DebugUtilsMessengerCreateInfoEXT>();
+        }
     }
 
     // Pick physical device
@@ -252,7 +255,6 @@ Instance::~Instance() {
     if (device) {
         vmaDestroyAllocator(allocator);
         device.destroy();
-        instance.destroySurfaceKHR(surface);
 
         if (debug_messenger) {
             instance.destroyDebugUtilsMessengerEXT(debug_messenger);

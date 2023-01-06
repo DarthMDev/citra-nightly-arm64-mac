@@ -67,8 +67,8 @@ layout (std140) uniform shader_data {
     LightSrc light_src[NUM_LIGHTS];
     vec4 const_color[NUM_TEV_STAGES];
     vec4 tev_combiner_buffer_color;
-    vec4 clip_coef;
     vec3 tex_lod_bias;
+    vec4 clip_coef;
 };
 )";
 

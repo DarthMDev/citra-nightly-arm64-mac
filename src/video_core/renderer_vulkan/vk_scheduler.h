@@ -6,12 +6,12 @@
 #include <condition_variable>
 #include <cstddef>
 #include <memory>
-#include <thread>
 #include <utility>
 #include <queue>
 #include "common/alignment.h"
 #include "common/common_funcs.h"
 #include "common/common_types.h"
+#include "common/polyfill_thread.h"
 #include "video_core/renderer_vulkan/vk_master_semaphore.h"
 #include "video_core/renderer_vulkan/vk_resource_pool.h"
 
@@ -183,7 +183,7 @@ private:
     };
 
 private:
-    void WorkerThread();
+    void WorkerThread(std::stop_token stop_token);
 
     void AllocateWorkerCommandBuffers();
 
@@ -205,8 +205,7 @@ private:
     std::mutex work_mutex;
     std::condition_variable_any work_cv;
     std::condition_variable wait_cv;
-    std::thread worker_thread;
-    std::atomic_bool stop_requested;
+    std::jthread worker_thread;
     bool use_worker_thread;
 };
 

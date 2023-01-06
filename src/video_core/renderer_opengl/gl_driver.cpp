@@ -80,7 +80,7 @@ Driver::Driver(bool gles, bool enable_debug) : is_gles{gles} {
      * https://developer.qualcomm.com/comment/11845
      */
     if (!gles) {
-        glEnable(GL_DEBUG_OUTPUT_SYNCHRONOUS);
+        glEnable(GL_DEBUG_OUTPUT);
         glDebugMessageCallback(DebugHandler, nullptr);
     }
 #endif
@@ -122,8 +122,10 @@ void Driver::DeduceVendor() {
         vendor = Vendor::AMD;
     } else if (gpu_vendor.find("Intel") != gpu_vendor.npos) {
         vendor = Vendor::Intel;
+    } else if (gpu_vendor.find("ARM") != gpu_vendor.npos) {
+        vendor = Vendor::ARM;
     } else if (gpu_vendor.find("GDI Generic") != gpu_vendor.npos) {
-        vendor = Vendor::Generic;
+            vendor = Vendor::Generic;
     }
 }
 

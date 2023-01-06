@@ -33,6 +33,7 @@
 #include "jni/camera/still_image_camera.h"
 #include "jni/config.h"
 #include "jni/emu_window/emu_window_vk.h"
+#include "jni/emu_window/emu_window_gl.h"
 #include "jni/game_info.h"
 #include "jni/game_settings.h"
 #include "jni/id_cache.h"
@@ -48,7 +49,7 @@ namespace {
 
 ANativeWindow* s_surf;
 
-std::unique_ptr<EmuWindow_Android_Vulkan> window;
+std::unique_ptr<EmuWindow_Android> window;
 
 std::atomic<bool> stop_run{true};
 std::atomic<bool> pause_emulation{false};
@@ -146,7 +147,17 @@ static Core::System::ResultStatus RunCitra(const std::string& filepath) {
         return Core::System::ResultStatus::ErrorLoader;
     }
 
-    window = std::make_unique<EmuWindow_Android_Vulkan>(s_surf);
+    const Settings::GraphicsAPI graphics_api = Settings::values.graphics_api.GetValue();
+    switch (graphics_api) {
+    case Settings::GraphicsAPI::OpenGLES:
+        window = std::make_unique<EmuWindow_Android_OpenGL>(s_surf);
+        break;
+    case Settings::GraphicsAPI::Vulkan:
+        window = std::make_unique<EmuWindow_Android_Vulkan>(s_surf);
+        break;
+    default:
+        UNREACHABLE_MSG("Unknown graphics API {}", graphics_api);
+    }
 
     Core::System& system{Core::System::GetInstance()};
 
@@ -259,6 +270,9 @@ void Java_org_citra_citra_1emu_NativeLibrary_SurfaceChanged(JNIEnv* env,
 
     if (window) {
         window->OnSurfaceChanged(s_surf);
+    }
+    if (VideoCore::g_renderer) {
+        VideoCore::g_renderer->NotifySurfaceChanged();
     }
 
     LOG_INFO(Frontend, "Surface changed");

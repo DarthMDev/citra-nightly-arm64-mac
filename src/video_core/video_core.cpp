@@ -93,7 +93,7 @@ void RequestScreenshot(void* data, std::function<void()> callback,
 }
 
 u16 GetResolutionScaleFactor() {
-    if (g_hw_renderer_enabled) {
+    if (g_hw_renderer_enabled && g_renderer) {
         return Settings::values.resolution_factor.GetValue()
                    ? Settings::values.resolution_factor.GetValue()
                    : g_renderer->GetRenderWindow().GetFramebufferLayout().GetScalingRatio();

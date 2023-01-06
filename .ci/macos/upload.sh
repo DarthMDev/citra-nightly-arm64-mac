@@ -15,8 +15,7 @@ cp build/bin/Release/citra-room "$REV_NAME"
 BUNDLE_PATH="$REV_NAME/citra-qt.app"
 BUNDLE_CONTENTS_PATH="$BUNDLE_PATH/Contents"
 BUNDLE_EXECUTABLE_PATH="$BUNDLE_CONTENTS_PATH/MacOS/citra-qt"
-BUNDLE_LIB_PATH="$BUNDLE_CONTENTS_PATH/lib"
-BUNDLE_FRAMEWORK_PATH="$BUNDLE_CONTENTS_PATH/Frameworks"
+BUNDLE_FRAMEWORKS_PATH="$BUNDLE_CONTENTS_PATH/Frameworks"
 BUNDLE_RESOURCES_PATH="$BUNDLE_CONTENTS_PATH/Resources"
 
 CITRA_STANDALONE_PATH="$REV_NAME/citra"
@@ -29,27 +28,29 @@ $(pwd)/Qt-5.15.2-universal/bin/macdeployqt $BUNDLE_PATH -executable=$BUNDLE_EXEC
 # move libs into folder for deployment
 macpack $CITRA_STANDALONE_PATH -d "libs"
 
-# bundle MoltenVK
-VULKAN_LOADER_PATH=/opt/local
-MOLTENVK_PATH=/opt/local
-mkdir $BUNDLE_LIB_PATH
+
 # replace SDL2 with the universal2 version , copy to frameworks directory
 cp /opt/local/lib/libSDL2-2.0.0.dylib $BUNDLE_FRAMEWORK_PATH
 #make another copy as libSDL2-2.0
 cp /opt/local/lib/libSDL2-2.0.0.dylib $BUNDLE_FRAMEWORK_PATH/libSDL2-2.0.dylib
 
-cp $VULKAN_LOADER_PATH/lib/libvulkan.dylib $BUNDLE_LIB_PATH
-cp $MOLTENVK_PATH/lib/libMoltenVK.dylib $BUNDLE_LIB_PATH
-cp -r $VULKAN_LOADER_PATH/share/vulkan $BUNDLE_RESOURCES_PATH
-install_name_tool -add_rpath "@loader_path/../lib/" $BUNDLE_EXECUTABLE_PATH
-# one for frameworks as well
+
+# install_name_tool -add_rpath "@loader_path/../lib/" $BUNDLE_EXECUTABLE_PATH
+# # one for frameworks as well
+# install_name_tool -add_rpath "@loader_path/../Frameworks/" $BUNDLE_EXECUTABLE_PATH
+
+
+
+
+
+
+VULKAN_SDK_PATH=~/VulkanSDK/*/macOS
+cp $VULKAN_SDK_PATH/lib/libvulkan.dylib $BUNDLE_FRAMEWORKS_PATH
+cp $VULKAN_SDK_PATH/lib/libMoltenVK.dylib $BUNDLE_FRAMEWORKS_PATH
+cp $VULKAN_SDK_PATH/lib/libVkLayer_*.dylib $BUNDLE_FRAMEWORKS_PATH
+cp -r $VULKAN_SDK_PATH/share/vulkan $BUNDLE_RESOURCES_PATH
+find $BUNDLE_RESOURCES_PATH/vulkan -type f -name "*.json" -exec sed -i'' -e 's/..\/..\/..\/lib/..\/..\/..\/Frameworks/g' {} \;
 install_name_tool -add_rpath "@loader_path/../Frameworks/" $BUNDLE_EXECUTABLE_PATH
-
-
-
-
-
-
 
 # workaround for libc++
 install_name_tool -change @loader_path/../Frameworks/libc++.1.0.dylib /usr/lib/libc++.1.dylib $BUNDLE_EXECUTABLE_PATH
