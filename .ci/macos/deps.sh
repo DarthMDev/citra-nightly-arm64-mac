@@ -14,7 +14,7 @@ cd citra-dependencies-universal2
 # install all .pkg dependencies
 for i in *.pkg; do sudo installer -pkg $i -target /opt/local; done
 # copy directory
-sudo cp -rv vulkan/share/* /opt/local/share
+sudo cp -rv vulkan/* /opt/local/
 sudo cp -rv ffmpeg/* /opt/local/
 cd ..
 # sudo port install openssl3 +universal glslang +universal moltenvk +universal vulkan-loader +universal libsdl2 +universal
