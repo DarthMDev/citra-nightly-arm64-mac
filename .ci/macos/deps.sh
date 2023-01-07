@@ -6,7 +6,9 @@ brew update
 # export PATH=$PATH:/opt/local/bin
 # wget https://github.com/macports/macports-base/releases/download/v2.8.0/MacPorts-2.8.0-12-Monterey.pkg
 # sudo installer -pkg ./MacPorts-2.8.0-12-Monterey.pkg -target /
-brew install ninja ccache p7zip
+# brew fails otherwise if we dont uninstall python3 first (issue with existing ide)
+brew uninstall python3.10
+brew install p7zip ccache ninja python3.10 || true
 
 
 git clone https://github.com/MichaelGDev48/citra-dependencies-universal2
