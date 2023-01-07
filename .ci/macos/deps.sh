@@ -6,9 +6,11 @@ brew update
 # export PATH=$PATH:/opt/local/bin
 # wget https://github.com/macports/macports-base/releases/download/v2.8.0/MacPorts-2.8.0-12-Monterey.pkg
 # sudo installer -pkg ./MacPorts-2.8.0-12-Monterey.pkg -target /
-# brew fails otherwise if we dont remove this first (issue with existing idle)
+# brew fails otherwise if we dont remove this first (issue with existing python3 symlink)
 rm '/usr/local/bin/idle3'
-brew install p7zip ccache ninja python@3.10 || true
+rm '/usr/local/bin/pydoc3'
+
+brew install p7zip ccache ninja || true
 
 
 git clone https://github.com/MichaelGDev48/citra-dependencies-universal2
