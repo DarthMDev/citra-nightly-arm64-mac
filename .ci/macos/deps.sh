@@ -1,26 +1,23 @@
 #!/bin/sh -ex
-brew update
 brew unlink python@2 || true
 rm '/usr/local/bin/2to3' || true
-# export PATH=$PATH:/opt/local/bin
-# wget https://github.com/macports/macports-base/releases/download/v2.8.0/MacPorts-2.8.0-12-Monterey.pkg
-# sudo installer -pkg ./MacPorts-2.8.0-12-Monterey.pkg -target /
-# brew fails otherwise if we dont remove this first (issue with existing python3 symlink)
-rm '/usr/local/bin/idle3' || true
-rm '/usr/local/bin/pydoc3' || true
-rm '/usr/local/bin/2to3-3.11' || true
-rm '/usr/local/bin/python3' || true
+brew update
 
-brew install p7zip ccache ninja || true
+export PATH=$PATH:/opt/local/bin
+wget https://github.com/macports/macports-base/releases/download/v2.8.0/MacPorts-2.8.0-12-Monterey.pkg
+sudo installer -pkg ./MacPorts-2.8.0-12-Monterey.pkg -target /
+sudo port install ninja ccache p7zip
 
 
 git clone https://github.com/MichaelGDev48/citra-dependencies-universal2
 cd citra-dependencies-universal2
 # install all .pkg dependencies
-for i in *.pkg; do sudo installer -pkg $i -target /usr/local; done
+for i in *.pkg; do sudo installer -pkg $i -target /opt/local; done
 # copy directory
+# sudo cp -rv vulkan/* /opt/local/
 sudo cp -rv ffmpeg/* /opt/local/
 cd ..
+# sudo port install openssl3 +universal glslang +universal moltenvk +universal vulkan-loader +universal libsdl2 +universal
 # grab qt5 universal2 binaries
 wget https://github.com/MichaelGDev48/qt5.15.2-universal-binaries/releases/download/1.0/Qt-5.15.2-universal.zip 
 unzip Qt-5.15.2-universal
