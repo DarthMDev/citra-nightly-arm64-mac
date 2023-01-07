@@ -1,14 +1,14 @@
 #!/bin/sh -ex
+brew update
 brew unlink python@2 || true
 rm '/usr/local/bin/2to3' || true
-brew update
-
 # export PATH=$PATH:/opt/local/bin
 # wget https://github.com/macports/macports-base/releases/download/v2.8.0/MacPorts-2.8.0-12-Monterey.pkg
 # sudo installer -pkg ./MacPorts-2.8.0-12-Monterey.pkg -target /
 # brew fails otherwise if we dont remove this first (issue with existing python3 symlink)
-rm '/usr/local/bin/idle3'
-rm '/usr/local/bin/pydoc3'
+rm '/usr/local/bin/idle3' || true
+rm '/usr/local/bin/pydoc3' || true
+rm '/usr/local/bin/2to3-3.11' || true
 
 brew install p7zip ccache ninja || true
 
