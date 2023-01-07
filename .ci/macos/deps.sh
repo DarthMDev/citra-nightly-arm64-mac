@@ -6,8 +6,8 @@ brew update
 # export PATH=$PATH:/opt/local/bin
 # wget https://github.com/macports/macports-base/releases/download/v2.8.0/MacPorts-2.8.0-12-Monterey.pkg
 # sudo installer -pkg ./MacPorts-2.8.0-12-Monterey.pkg -target /
-# brew fails otherwise if we dont uninstall python3 first (issue with existing ide)
-brew uninstall python@3.10
+# brew fails otherwise if we dont remove this first (issue with existing idle)
+rm '/usr/local/bin/idle3'
 brew install p7zip ccache ninja python@3.10 || true
 
 
