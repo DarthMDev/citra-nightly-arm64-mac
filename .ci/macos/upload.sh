@@ -30,14 +30,11 @@ macpack $CITRA_STANDALONE_PATH -d "libs"
 
 
 # replace SDL2 with the universal2 version , copy to frameworks directory
-cp /opt/local/lib/libSDL2-2.0.0.dylib $BUNDLE_FRAMEWORKS_PATH
+cp /usr/local/lib/libSDL2-2.0.0.dylib $BUNDLE_FRAMEWORKS_PATH
 #make another copy as libSDL2-2.0
-cp /opt/local/lib/libSDL2-2.0.0.dylib $BUNDLE_FRAMEWORKS_PATH/libSDL2-2.0.dylib
+cp /usr/local/lib/libSDL2-2.0.0.dylib $BUNDLE_FRAMEWORKS_PATH/libSDL2-2.0.dylib
 
 
-# install_name_tool -add_rpath "@loader_path/../lib/" $BUNDLE_EXECUTABLE_PATH
-# # one for frameworks as well
-# install_name_tool -add_rpath "@loader_path/../Frameworks/" $BUNDLE_EXECUTABLE_PATH
 
 
 
