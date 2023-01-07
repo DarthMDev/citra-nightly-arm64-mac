@@ -17,7 +17,6 @@ for i in *.pkg; do sudo installer -pkg $i -target /opt/local; done
 # sudo cp -rv vulkan/* /opt/local/
 sudo cp -rv ffmpeg/* /opt/local/
 cd ..
-# sudo port install openssl3 +universal glslang +universal moltenvk +universal vulkan-loader +universal libsdl2 +universal
 # grab qt5 universal2 binaries
 wget https://github.com/MichaelGDev48/qt5.15.2-universal-binaries/releases/download/1.0/Qt-5.15.2-universal.zip 
 unzip Qt-5.15.2-universal

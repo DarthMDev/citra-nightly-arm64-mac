@@ -4,7 +4,6 @@ set -o pipefail
 
 export Qt5_DIR=$(pwd)/Qt-5.15.2-universal
 
-# export PATH="/opt/local/libexec:$PATH"
 export PATH=$PATH:/opt/local/bin
 # ccache configurations
 export CCACHE_CPP2=yes

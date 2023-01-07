@@ -35,9 +35,6 @@ cp /opt/local/lib/libSDL2-2.0.0.dylib $BUNDLE_FRAMEWORKS_PATH
 cp /opt/local/lib/libSDL2-2.0.0.dylib $BUNDLE_FRAMEWORKS_PATH/libSDL2-2.0.dylib
 
 
-# install_name_tool -add_rpath "@loader_path/../lib/" $BUNDLE_EXECUTABLE_PATH
-# # one for frameworks as well
-# install_name_tool -add_rpath "@loader_path/../Frameworks/" $BUNDLE_EXECUTABLE_PATH
 
 
 
