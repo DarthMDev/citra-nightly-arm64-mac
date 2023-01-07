@@ -9,6 +9,7 @@ rm '/usr/local/bin/2to3' || true
 rm '/usr/local/bin/idle3' || true
 rm '/usr/local/bin/pydoc3' || true
 rm '/usr/local/bin/2to3-3.11' || true
+rm '/usr/local/bin/python3' || true
 
 brew install p7zip ccache ninja || true
 
@@ -18,8 +19,7 @@ cd citra-dependencies-universal2
 # install all .pkg dependencies
 for i in *.pkg; do sudo installer -pkg $i -target /usr/local; done
 # copy directory
-# sudo cp -rv vulkan/* /opt/local/
-sudo cp -rv ffmpeg/* /usr/local/
+sudo cp -rv ffmpeg/* /opt/local/
 cd ..
 # grab qt5 universal2 binaries
 wget https://github.com/MichaelGDev48/qt5.15.2-universal-binaries/releases/download/1.0/Qt-5.15.2-universal.zip 
