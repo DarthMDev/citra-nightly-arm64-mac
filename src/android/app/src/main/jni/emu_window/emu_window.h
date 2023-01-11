@@ -47,8 +47,8 @@ protected:
     ANativeWindow* render_window{};
     ANativeWindow* host_window{};
 
-    int window_width{1080};
-    int window_height{2220};
+    int window_width{};
+    int window_height{};
 
     std::unique_ptr<Frontend::GraphicsContext> core_context;
 

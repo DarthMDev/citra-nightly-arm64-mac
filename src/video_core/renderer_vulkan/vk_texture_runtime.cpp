@@ -493,6 +493,16 @@ void TextureRuntime::ClearTextureWithRenderpass(Surface& surface,
     const bool is_color = surface.type != VideoCore::SurfaceType::Depth &&
                           surface.type != VideoCore::SurfaceType::DepthStencil;
 
+    const vk::AccessFlags access_flag =
+            is_color ? vk::AccessFlagBits::eColorAttachmentRead |
+                       vk::AccessFlagBits::eColorAttachmentWrite
+                     : vk::AccessFlagBits::eDepthStencilAttachmentRead |
+                       vk::AccessFlagBits::eDepthStencilAttachmentWrite;
+
+    const vk::PipelineStageFlags pipeline_flags =
+            is_color ? vk::PipelineStageFlagBits::eColorAttachmentOutput
+                     : vk::PipelineStageFlagBits::eNone;
+
     const vk::RenderPass clear_renderpass =
         is_color ? renderpass_cache.GetRenderpass(surface.pixel_format,
                                                   VideoCore::PixelFormat::Invalid, true)
@@ -535,10 +545,10 @@ void TextureRuntime::ClearTextureWithRenderpass(Surface& surface,
         .src_image = surface.alloc.image,
     };
 
-    scheduler.Record([params, level = clear.texture_level](vk::CommandBuffer cmdbuf) {
+    scheduler.Record([params, access_flag, pipeline_flags](vk::CommandBuffer cmdbuf) {
         const vk::ImageMemoryBarrier pre_barrier = {
             .srcAccessMask = params.src_access,
-            .dstAccessMask = vk::AccessFlagBits::eTransferWrite,
+            .dstAccessMask = access_flag,
             .oldLayout = vk::ImageLayout::eGeneral,
             .newLayout = vk::ImageLayout::eGeneral,
             .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
@@ -546,23 +556,23 @@ void TextureRuntime::ClearTextureWithRenderpass(Surface& surface,
             .image = params.src_image,
             .subresourceRange{
                 .aspectMask = params.aspect,
-                .baseMipLevel = level,
+                .baseMipLevel = 0,
                 .levelCount = 1,
                 .baseArrayLayer = 0,
                 .layerCount = VK_REMAINING_ARRAY_LAYERS,
             },
         };
 
-        cmdbuf.pipelineBarrier(params.pipeline_flags, vk::PipelineStageFlagBits::eTransfer,
-                                      vk::DependencyFlagBits::eByRegion, {}, {}, pre_barrier);
+        cmdbuf.pipelineBarrier(params.pipeline_flags, pipeline_flags,
+                               vk::DependencyFlagBits::eByRegion, {}, {}, pre_barrier);
     });
 
     renderpass_cache.EnterRenderpass(clear_info);
     renderpass_cache.ExitRenderpass();
 
-    scheduler.Record([params, level = clear.texture_level](vk::CommandBuffer cmdbuf) {
+    scheduler.Record([params, access_flag, pipeline_flags](vk::CommandBuffer cmdbuf) {
         const vk::ImageMemoryBarrier post_barrier = {
-            .srcAccessMask = vk::AccessFlagBits::eTransferWrite,
+            .srcAccessMask = access_flag,
             .dstAccessMask = params.src_access,
             .oldLayout = vk::ImageLayout::eGeneral,
             .newLayout = vk::ImageLayout::eGeneral,
@@ -571,15 +581,15 @@ void TextureRuntime::ClearTextureWithRenderpass(Surface& surface,
             .image = params.src_image,
             .subresourceRange{
                 .aspectMask = params.aspect,
-                .baseMipLevel = level,
+                .baseMipLevel = 0,
                 .levelCount = 1,
                 .baseArrayLayer = 0,
                 .layerCount = VK_REMAINING_ARRAY_LAYERS,
             },
         };
 
-        cmdbuf.pipelineBarrier(vk::PipelineStageFlagBits::eTransfer, params.pipeline_flags,
-                                      vk::DependencyFlagBits::eByRegion, {}, {}, post_barrier);
+        cmdbuf.pipelineBarrier(pipeline_flags, params.pipeline_flags,
+                               vk::DependencyFlagBits::eByRegion, {}, {}, post_barrier);
     });
 }
 

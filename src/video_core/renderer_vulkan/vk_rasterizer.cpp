@@ -113,6 +113,8 @@ RasterizerVulkan::RasterizerVulkan(Frontend::EmuWindow& emu_window, const Instan
 
     // Since we don't have access to VK_EXT_descriptor_indexing we need to intiallize
     // all descriptor sets even the ones we don't use. Use default_texture for this
+    pipeline_cache.BindBuffer(0, stream_buffer.Handle(), 0, 1);
+    pipeline_cache.BindBuffer(1, stream_buffer.Handle(), 0, 1);
     pipeline_cache.BindTexelBuffer(2, texture_lf_view);
     pipeline_cache.BindTexelBuffer(3, texture_rg_view);
     pipeline_cache.BindTexelBuffer(4, texture_rgba_view);
@@ -152,42 +154,6 @@ RasterizerVulkan::~RasterizerVulkan() {
 void RasterizerVulkan::LoadDiskResources(const std::atomic_bool& stop_loading,
                                          const VideoCore::DiskResourceLoadCallback& callback) {
     pipeline_cache.LoadDiskCache();
-}
-
-void RasterizerVulkan::SyncEntireState() {
-    // Sync fixed function Vulkan state
-    SyncFixedState();
-
-    // Sync uniforms
-    SyncClipCoef();
-    SyncDepthScale();
-    SyncDepthOffset();
-    SyncAlphaTest();
-    SyncCombinerColor();
-    auto& tev_stages = Pica::g_state.regs.texturing.GetTevStages();
-    for (std::size_t index = 0; index < tev_stages.size(); ++index)
-        SyncTevConstColor(index, tev_stages[index]);
-
-    SyncGlobalAmbient();
-    for (unsigned light_index = 0; light_index < 8; light_index++) {
-        SyncLightSpecular0(light_index);
-        SyncLightSpecular1(light_index);
-        SyncLightDiffuse(light_index);
-        SyncLightAmbient(light_index);
-        SyncLightPosition(light_index);
-        SyncLightDistanceAttenuationBias(light_index);
-        SyncLightDistanceAttenuationScale(light_index);
-    }
-
-    SyncFogColor();
-    SyncProcTexNoise();
-    SyncProcTexBias();
-    SyncShadowBias();
-    SyncShadowTextureBias();
-
-    for (unsigned tex_index = 0; tex_index < 3; tex_index++) {
-        SyncTextureLodBias(tex_index);
-    }
 }
 
 void RasterizerVulkan::SyncFixedState() {
@@ -832,30 +798,22 @@ bool RasterizerVulkan::Draw(bool accelerate, bool is_indexed) {
 
 void RasterizerVulkan::NotifyFixedFunctionPicaRegisterChanged(u32 id) {
     switch (id) {
-    // Culling
-    case PICA_REG_INDEX(rasterizer.cull_mode):
-        SyncCullMode();
-        break;
-
     // Clipping plane
     case PICA_REG_INDEX(rasterizer.clip_enable):
         SyncClipEnabled();
         break;
 
-    case PICA_REG_INDEX(rasterizer.clip_coef[0]):
-    case PICA_REG_INDEX(rasterizer.clip_coef[1]):
-    case PICA_REG_INDEX(rasterizer.clip_coef[2]):
-    case PICA_REG_INDEX(rasterizer.clip_coef[3]):
-        SyncClipCoef();
+    // Culling
+    case PICA_REG_INDEX(rasterizer.cull_mode):
+        SyncCullMode();
         break;
 
     // Blending
     case PICA_REG_INDEX(framebuffer.output_merger.alphablend_enable):
-        if (instance.NeedsLogicOpEmulation()) {
-            // We need this in the fragment shader to emulate logic operations
-            shader_dirty = true;
-        }
         SyncBlendEnabled();
+        // Update since logic op emulation depends on alpha blend enable.
+        SyncLogicOp();
+        SyncColorWriteMask();
         break;
     case PICA_REG_INDEX(framebuffer.output_merger.alpha_blending):
         SyncBlendFuncs();
@@ -898,11 +856,9 @@ void RasterizerVulkan::NotifyFixedFunctionPicaRegisterChanged(u32 id) {
 
     // Logic op
     case PICA_REG_INDEX(framebuffer.output_merger.logic_op):
-        if (instance.NeedsLogicOpEmulation()) {
-            // We need this in the fragment shader to emulate logic operations
-            shader_dirty = true;
-        }
         SyncLogicOp();
+        // Update since color write mask is used to emulate no-op.
+        SyncColorWriteMask();
         break;
     }
 }
@@ -1186,15 +1142,9 @@ vk::Framebuffer RasterizerVulkan::CreateFramebuffer(const FramebufferInfo& info)
 }
 
 void RasterizerVulkan::SyncClipEnabled() {
-    uniform_block_data.data.enable_clip1 = Pica::g_state.regs.rasterizer.clip_enable != 0;
-}
-
-void RasterizerVulkan::SyncClipCoef() {
-    const auto raw_clip_coef = Pica::g_state.regs.rasterizer.GetClipCoef();
-    const Common::Vec4f new_clip_coef = {raw_clip_coef.x.ToFloat32(), raw_clip_coef.y.ToFloat32(),
-                                         raw_clip_coef.z.ToFloat32(), raw_clip_coef.w.ToFloat32()};
-    if (new_clip_coef != uniform_block_data.data.clip_coef) {
-        uniform_block_data.data.clip_coef = new_clip_coef;
+    bool clip_enabled = Pica::g_state.regs.rasterizer.clip_enable != 0;
+    if (clip_enabled != uniform_block_data.data.enable_clip1) {
+        uniform_block_data.data.enable_clip1 = clip_enabled;
         uniform_block_data.dirty = true;
     }
 }
@@ -1232,7 +1182,13 @@ void RasterizerVulkan::SyncBlendColor() {
 }
 
 void RasterizerVulkan::SyncLogicOp() {
+    if (instance.NeedsLogicOpEmulation()) {
+        // We need this in the fragment shader to emulate logic operations
+        shader_dirty = true;
+    }
+
     const auto& regs = Pica::g_state.regs;
+    pipeline_info.blending.logic_op.Assign(regs.framebuffer.output_merger.logic_op);
 
     const bool is_logic_op_emulated =
         instance.NeedsLogicOpEmulation() && !regs.framebuffer.output_merger.alphablend_enable;
@@ -1242,14 +1198,14 @@ void RasterizerVulkan::SyncLogicOp() {
         // Color output is disabled by logic operation. We use color write mask to skip
         // color but allow depth write.
         pipeline_info.blending.color_write_mask.Assign(0);
-    } else {
-        pipeline_info.blending.logic_op.Assign(regs.framebuffer.output_merger.logic_op);
     }
 }
 
 void RasterizerVulkan::SyncColorWriteMask() {
     const auto& regs = Pica::g_state.regs;
-    const u32 color_mask = (regs.framebuffer.output_merger.depth_color_mask >> 8) & 0xF;
+    const u32 color_mask = regs.framebuffer.framebuffer.allow_color_write != 0
+        ? (regs.framebuffer.output_merger.depth_color_mask >> 8) & 0xF
+        : 0;
 
     const bool is_logic_op_emulated =
         instance.NeedsLogicOpEmulation() && !regs.framebuffer.output_merger.alphablend_enable;

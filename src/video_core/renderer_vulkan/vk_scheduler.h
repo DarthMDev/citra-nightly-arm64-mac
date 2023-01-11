@@ -179,7 +179,7 @@ private:
         std::size_t recorded_counts = 0;
         std::size_t command_offset = 0;
         bool submit = false;
-        alignas(std::max_align_t) std::array<u8, 0x80000> data{};
+        alignas(std::max_align_t) std::array<u8, 0x8000> data{};
     };
 
 private:

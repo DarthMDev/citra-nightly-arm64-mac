@@ -60,9 +60,9 @@ RasterizerOpenGL::RasterizerOpenGL(Frontend::EmuWindow& emu_window, Driver& driv
 
     glGetIntegerv(GL_UNIFORM_BUFFER_OFFSET_ALIGNMENT, &uniform_buffer_alignment);
     uniform_size_aligned_vs =
-        Common::AlignUp<std::size_t>(sizeof(VSUniformData), uniform_buffer_alignment);
+        Common::AlignUp<std::size_t>(sizeof(Pica::Shader::VSUniformData), uniform_buffer_alignment);
     uniform_size_aligned_fs =
-        Common::AlignUp<std::size_t>(sizeof(UniformData), uniform_buffer_alignment);
+        Common::AlignUp<std::size_t>(sizeof(Pica::Shader::UniformData), uniform_buffer_alignment);
 
     // Set vertex attributes for software shader path
     state.draw.vertex_array = sw_vao.handle;
@@ -136,8 +136,7 @@ void RasterizerOpenGL::LoadDiskResources(const std::atomic_bool& stop_loading,
     shader_program_manager.LoadDiskCache(stop_loading, callback);
 }
 
-void RasterizerOpenGL::SyncEntireState() {
-    // Sync fixed function OpenGL state
+void RasterizerOpenGL::SyncFixedState() {
     SyncClipEnabled();
     SyncCullMode();
     SyncBlendEnabled();
@@ -149,37 +148,6 @@ void RasterizerOpenGL::SyncEntireState() {
     SyncColorWriteMask();
     SyncStencilWriteMask();
     SyncDepthWriteMask();
-
-    // Sync uniforms
-    SyncClipCoef();
-    SyncDepthScale();
-    SyncDepthOffset();
-    SyncAlphaTest();
-    SyncCombinerColor();
-    auto& tev_stages = Pica::g_state.regs.texturing.GetTevStages();
-    for (std::size_t index = 0; index < tev_stages.size(); ++index)
-        SyncTevConstColor(index, tev_stages[index]);
-
-    SyncGlobalAmbient();
-    for (unsigned light_index = 0; light_index < 8; light_index++) {
-        SyncLightSpecular0(light_index);
-        SyncLightSpecular1(light_index);
-        SyncLightDiffuse(light_index);
-        SyncLightAmbient(light_index);
-        SyncLightPosition(light_index);
-        SyncLightDistanceAttenuationBias(light_index);
-        SyncLightDistanceAttenuationScale(light_index);
-    }
-
-    SyncFogColor();
-    SyncProcTexNoise();
-    SyncProcTexBias();
-    SyncShadowBias();
-    SyncShadowTextureBias();
-
-    for (unsigned tex_index = 0; tex_index < 3; tex_index++) {
-        SyncTextureLodBias(tex_index);
-    }
 }
 
 static constexpr std::array<GLenum, 4> vs_attrib_types{
@@ -717,30 +685,22 @@ bool RasterizerOpenGL::Draw(bool accelerate, bool is_indexed) {
 
 void RasterizerOpenGL::NotifyFixedFunctionPicaRegisterChanged(u32 id) {
     switch (id) {
-    // Culling
-    case PICA_REG_INDEX(rasterizer.cull_mode):
-        SyncCullMode();
-        break;
-
     // Clipping plane
     case PICA_REG_INDEX(rasterizer.clip_enable):
         SyncClipEnabled();
         break;
 
-    case PICA_REG_INDEX(rasterizer.clip_coef[0]):
-    case PICA_REG_INDEX(rasterizer.clip_coef[1]):
-    case PICA_REG_INDEX(rasterizer.clip_coef[2]):
-    case PICA_REG_INDEX(rasterizer.clip_coef[3]):
-        SyncClipCoef();
+    // Culling
+    case PICA_REG_INDEX(rasterizer.cull_mode):
+        SyncCullMode();
         break;
 
     // Blending
     case PICA_REG_INDEX(framebuffer.output_merger.alphablend_enable):
-        if (driver.IsOpenGLES()) {
-            // With GLES, we need this in the fragment shader to emulate logic operations
-            shader_dirty = true;
-        }
         SyncBlendEnabled();
+        // Update since logic op emulation depends on alpha blend enable.
+        SyncLogicOp();
+        SyncColorWriteMask();
         break;
     case PICA_REG_INDEX(framebuffer.output_merger.alpha_blending):
         SyncBlendFuncs();
@@ -783,11 +743,9 @@ void RasterizerOpenGL::NotifyFixedFunctionPicaRegisterChanged(u32 id) {
 
     // Logic op
     case PICA_REG_INDEX(framebuffer.output_merger.logic_op):
-        if (driver.IsOpenGLES()) {
-            // With GLES, we need this in the fragment shader to emulate logic operations
-            shader_dirty = true;
-        }
         SyncLogicOp();
+        // Update since color write mask is used to emulate no-op.
+        SyncColorWriteMask();
         break;
     }
 }
@@ -1066,16 +1024,6 @@ void RasterizerOpenGL::SyncClipEnabled() {
     state.clip_distance[1] = Pica::g_state.regs.rasterizer.clip_enable != 0;
 }
 
-void RasterizerOpenGL::SyncClipCoef() {
-    const auto raw_clip_coef = Pica::g_state.regs.rasterizer.GetClipCoef();
-    const Common::Vec4f new_clip_coef = {raw_clip_coef.x.ToFloat32(), raw_clip_coef.y.ToFloat32(),
-                                         raw_clip_coef.z.ToFloat32(), raw_clip_coef.w.ToFloat32()};
-    if (new_clip_coef != uniform_block_data.data.clip_coef) {
-        uniform_block_data.data.clip_coef = new_clip_coef;
-        uniform_block_data.dirty = true;
-    }
-}
-
 void RasterizerOpenGL::SyncCullMode() {
     const auto& regs = Pica::g_state.regs;
 
@@ -1132,6 +1080,11 @@ void RasterizerOpenGL::SyncBlendColor() {
 }
 
 void RasterizerOpenGL::SyncLogicOp() {
+    if (driver.IsOpenGLES()) {
+        // With GLES, we need this in the fragment shader to emulate logic operations
+        shader_dirty = true;
+    }
+
     const auto& regs = Pica::g_state.regs;
     state.logic_op = PicaToGL::LogicOp(regs.framebuffer.output_merger.logic_op);
 
@@ -1410,18 +1363,18 @@ void RasterizerOpenGL::UploadUniforms(bool accelerate_draw) {
         uniform_buffer.Map(uniform_size, uniform_buffer_alignment);
 
     if (sync_vs) {
-        VSUniformData vs_uniforms;
+        Pica::Shader::VSUniformData vs_uniforms;
         vs_uniforms.uniforms.SetFromRegs(Pica::g_state.regs.vs, Pica::g_state.vs);
         std::memcpy(uniforms + used_bytes, &vs_uniforms, sizeof(vs_uniforms));
-        glBindBufferRange(GL_UNIFORM_BUFFER, static_cast<GLuint>(UniformBindings::VS),
-                          uniform_buffer.GetHandle(), offset + used_bytes, sizeof(VSUniformData));
+        glBindBufferRange(GL_UNIFORM_BUFFER, static_cast<GLuint>(Pica::Shader::UniformBindings::VS),
+                          uniform_buffer.GetHandle(), offset + used_bytes, sizeof(vs_uniforms));
         used_bytes += uniform_size_aligned_vs;
     }
 
     if (sync_fs || invalidate) {
-        std::memcpy(uniforms + used_bytes, &uniform_block_data.data, sizeof(UniformData));
-        glBindBufferRange(GL_UNIFORM_BUFFER, static_cast<GLuint>(UniformBindings::Common),
-                          uniform_buffer.GetHandle(), offset + used_bytes, sizeof(UniformData));
+        std::memcpy(uniforms + used_bytes, &uniform_block_data.data, sizeof(Pica::Shader::UniformData));
+        glBindBufferRange(GL_UNIFORM_BUFFER, static_cast<GLuint>(Pica::Shader::UniformBindings::Common),
+                          uniform_buffer.GetHandle(), offset + used_bytes, sizeof(Pica::Shader::UniformData));
         uniform_block_data.dirty = false;
         used_bytes += uniform_size_aligned_fs;
     }

@@ -4,8 +4,8 @@
 
 #pragma once
 
-#include <memory>
 #include "common/common_types.h"
+#include "common/vector_math.h"
 #include "video_core/rasterizer_interface.h"
 #include "video_core/video_core.h"
 

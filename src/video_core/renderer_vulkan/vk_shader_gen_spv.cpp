@@ -4,7 +4,6 @@
 
 #include "common/microprofile.h"
 #include "core/core.h"
-#include "video_core/regs.h"
 #include "video_core/renderer_vulkan/vk_shader_gen_spv.h"
 #include "video_core/shader/shader_uniforms.h"
 
@@ -75,8 +74,34 @@ void FragmentModule::Generate() {
     // do our own transformation according to PICA specification.
     WriteDepth();
 
+    Id color{Byteround(last_tex_env_out, 4)};
+    if (config.state.emulate_logic_op) {
+        switch (config.state.logic_op) {
+        case FramebufferRegs::LogicOp::Clear:
+            color = ConstF32(0.f, 0.f, 0.f, 0.f);
+            break;
+        case FramebufferRegs::LogicOp::Set:
+            color = ConstF32(1.f, 1.f, 1.f, 1.f);
+            break;
+        case FramebufferRegs::LogicOp::Copy:
+            // Take the color output as-is
+            break;
+        case FramebufferRegs::LogicOp::CopyInverted:
+            //out += "color = ~color;\n";
+            break;
+        case FramebufferRegs::LogicOp::NoOp:
+            // We need to discard the color, but not necessarily the depth. This is not possible
+            // with fragment shader alone, so we emulate this behavior with the color mask.
+            break;
+        default:
+            LOG_CRITICAL(HW_GPU, "Unhandled logic_op {:x}",
+                         static_cast<u32>(config.state.logic_op.Value()));
+            UNIMPLEMENTED();
+        }
+    }
+
     // Write output color
-    OpStore(color_id, Byteround(last_tex_env_out, 4));
+    OpStore(color_id, color);
     OpReturn();
     OpFunctionEnd();
 }

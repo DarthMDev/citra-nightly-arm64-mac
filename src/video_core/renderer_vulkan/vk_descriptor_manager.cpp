@@ -61,7 +61,7 @@ constexpr static std::array RASTERIZER_SETS = {
                 vk::DescriptorType::eStorageImage,
                 vk::DescriptorType::eStorageImage,
             },
-        .binding_count = 7, // TODO: Combine cube faces to a single storage image
+        .binding_count = 4, // TODO: Combine cube faces to a single storage image
                             // some android devices only expose up to four storage
                             // slots per pipeline
     },

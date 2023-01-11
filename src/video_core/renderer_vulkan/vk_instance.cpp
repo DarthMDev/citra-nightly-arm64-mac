@@ -42,8 +42,9 @@ DebugHandler(VkDebugUtilsMessageSeverityFlagBitsEXT severity, VkDebugUtilsMessag
         level = Log::Level::Info;
     }
 
-    LOG_GENERIC(Log::Class::Render_Vulkan, level, "{}: {}", callback_data->pMessageIdName,
-                callback_data->pMessage);
+    LOG_GENERIC(Log::Class::Render_Vulkan, level, "{}: {}",
+                callback_data->pMessageIdName ? callback_data->pMessageIdName : "<null>",
+                callback_data->pMessage ? callback_data->pMessage : "<null>");
 
     return VK_FALSE;
 }

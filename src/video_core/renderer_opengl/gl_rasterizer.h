@@ -42,8 +42,7 @@ public:
                            u32 pixel_stride, ScreenInfo& screen_info);
     bool AccelerateDrawBatch(bool is_indexed) override;
 
-    /// Syncs entire status to match PICA registers
-    void SyncEntireState() override;
+    void SyncFixedState() override;
 
 private:
     struct SamplerInfo {
@@ -75,9 +74,6 @@ private:
 
     /// Syncs the clip enabled status to match the PICA register
     void SyncClipEnabled();
-
-    /// Syncs the clip coefficients to match the PICA register
-    void SyncClipCoef();
 
     /// Sets the OpenGL shader in accordance with the current PICA register state
     void SetShader();

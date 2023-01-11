@@ -12,6 +12,7 @@
 #include "video_core/renderer_opengl/gl_shader_disk_cache.h"
 #include "video_core/renderer_opengl/gl_shader_manager.h"
 #include "video_core/renderer_opengl/gl_state.h"
+#include "video_core/shader/shader_uniforms.h"
 #include "video_core/video_core.h"
 
 namespace OpenGL {
@@ -84,7 +85,7 @@ static std::tuple<PicaVSConfig, Pica::Shader::ShaderSetup> BuildVSConfigFromRaw(
     return {PicaVSConfig{raw.GetRawShaderConfig().vs, setup}, setup};
 }
 
-static void SetShaderUniformBlockBinding(GLuint shader, const char* name, UniformBindings binding,
+static void SetShaderUniformBlockBinding(GLuint shader, const char* name, Pica::Shader::UniformBindings binding,
                                          std::size_t expected_size) {
     const GLuint ub_index = glGetUniformBlockIndex(shader, name);
     if (ub_index == GL_INVALID_INDEX) {
@@ -99,9 +100,10 @@ static void SetShaderUniformBlockBinding(GLuint shader, const char* name, Unifor
 }
 
 static void SetShaderUniformBlockBindings(GLuint shader) {
-    SetShaderUniformBlockBinding(shader, "shader_data", UniformBindings::Common,
-                                 sizeof(UniformData));
-    SetShaderUniformBlockBinding(shader, "vs_config", UniformBindings::VS, sizeof(VSUniformData));
+    SetShaderUniformBlockBinding(shader, "shader_data", Pica::Shader::UniformBindings::Common,
+                                 sizeof(Pica::Shader::UniformData));
+    SetShaderUniformBlockBinding(shader, "vs_config", Pica::Shader::UniformBindings::VS,
+                                 sizeof(Pica::Shader::VSUniformData));
 }
 
 static void SetShaderSamplerBinding(GLuint shader, const char* name,
@@ -145,21 +147,6 @@ static void SetShaderSamplerBindings(GLuint shader) {
 
     cur_state.draw.shader_program = old_program;
     cur_state.Apply();
-}
-
-void PicaUniformsData::SetFromRegs(const Pica::ShaderRegs& regs,
-                                   const Pica::Shader::ShaderSetup& setup) {
-    std::transform(std::begin(setup.uniforms.b), std::end(setup.uniforms.b), std::begin(bools),
-                   [](bool value) -> BoolAligned { return {value ? GL_TRUE : GL_FALSE}; });
-    std::transform(std::begin(regs.int_uniforms), std::end(regs.int_uniforms), std::begin(i),
-                   [](const auto& value) -> Common::Vec4u {
-                       return {value.x.Value(), value.y.Value(), value.z.Value(), value.w.Value()};
-                   });
-    std::transform(std::begin(setup.uniforms.f), std::end(setup.uniforms.f), std::begin(f),
-                   [](const auto& value) -> Common::Vec4f {
-                       return {value.x.ToFloat32(), value.y.ToFloat32(), value.z.ToFloat32(),
-                               value.w.ToFloat32()};
-                   });
 }
 
 /**

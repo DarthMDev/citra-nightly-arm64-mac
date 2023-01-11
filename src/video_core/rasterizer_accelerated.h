@@ -23,6 +23,12 @@ public:
     void NotifyPicaRegisterChanged(u32 id) override;
     void ClearAll(bool flush) override;
 
+    /// Syncs entire status to match PICA registers
+    void SyncEntireState() override;
+
+    /// Sync fixed-function pipeline state
+    virtual void SyncFixedState() = 0;
+
 protected:
     /// Notifies that a fixed function PICA register changed to the video backend
     virtual void NotifyFixedFunctionPicaRegisterChanged(u32 id) = 0;
@@ -87,6 +93,9 @@ protected:
 
     /// Syncs the texture LOD bias to match the PICA register
     void SyncTextureLodBias(int tex_index);
+
+    /// Syncs the clip coefficients to match the PICA register
+    void SyncClipCoef();
 
 protected:
     /// Structure that keeps tracks of the uniform state

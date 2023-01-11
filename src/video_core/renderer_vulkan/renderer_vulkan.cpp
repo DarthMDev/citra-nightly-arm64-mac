@@ -907,16 +907,11 @@ void RendererVulkan::SwapBuffers() {
     const auto& layout = render_window.GetFramebufferLayout();
     PrepareRendertarget();
 
-    const auto RecreateSwapchain = [&] {
-        scheduler.Finish();
-        swapchain.Create();
-    };
-
     do {
         if (swapchain.NeedsRecreation()) {
-            RecreateSwapchain();
+            scheduler.Finish();
+            swapchain.Create();
         }
-        scheduler.WaitWorker();
         swapchain.AcquireNextImage();
     } while (swapchain.NeedsRecreation());
 

@@ -96,4 +96,6 @@ static_assert(sizeof(VSUniformData) == 1856,
 static_assert(sizeof(VSUniformData) < 16384,
               "VSUniformData structure must be less than 16kb as per the OpenGL spec");
 
+std::string BuildShaderUniformDefinitions(const std::string& extra_layout_parameters = "");
+
 } // namespace Pica::Shader

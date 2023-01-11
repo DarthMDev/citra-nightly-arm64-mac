@@ -95,20 +95,13 @@ public:
                            u32 pixel_stride, ScreenInfo& screen_info);
     bool AccelerateDrawBatch(bool is_indexed) override;
 
-    /// Syncs entire status to match PICA registers
-    void SyncEntireState() override;
-
-    /// Sync fixed function pipeline state
-    void SyncFixedState();
+    void SyncFixedState() override;
 
 private:
     void NotifyFixedFunctionPicaRegisterChanged(u32 id) override;
 
     /// Syncs the clip enabled status to match the PICA register
     void SyncClipEnabled();
-
-    /// Syncs the clip coefficients to match the PICA register
-    void SyncClipCoef();
 
     /// Syncs the cull mode to match the PICA register
     void SyncCullMode();

@@ -221,6 +221,42 @@ RasterizerAccelerated::VertexArrayInfo RasterizerAccelerated::AnalyzeVertexArray
     return {vertex_min, vertex_max, vs_input_size};
 }
 
+void RasterizerAccelerated::SyncEntireState() {
+    // Sync renderer-specific fixed-function state
+    SyncFixedState();
+
+    // Sync uniforms
+    SyncClipCoef();
+    SyncDepthScale();
+    SyncDepthOffset();
+    SyncAlphaTest();
+    SyncCombinerColor();
+    auto& tev_stages = Pica::g_state.regs.texturing.GetTevStages();
+    for (std::size_t index = 0; index < tev_stages.size(); ++index)
+        SyncTevConstColor(index, tev_stages[index]);
+
+    SyncGlobalAmbient();
+    for (unsigned light_index = 0; light_index < 8; light_index++) {
+        SyncLightSpecular0(light_index);
+        SyncLightSpecular1(light_index);
+        SyncLightDiffuse(light_index);
+        SyncLightAmbient(light_index);
+        SyncLightPosition(light_index);
+        SyncLightDistanceAttenuationBias(light_index);
+        SyncLightDistanceAttenuationScale(light_index);
+    }
+
+    SyncFogColor();
+    SyncProcTexNoise();
+    SyncProcTexBias();
+    SyncShadowBias();
+    SyncShadowTextureBias();
+
+    for (unsigned tex_index = 0; tex_index < 3; tex_index++) {
+        SyncTextureLodBias(tex_index);
+    }
+}
+
 void RasterizerAccelerated::NotifyPicaRegisterChanged(u32 id) {
     const auto& regs = Pica::g_state.regs;
 
@@ -655,6 +691,14 @@ void RasterizerAccelerated::NotifyPicaRegisterChanged(u32 id) {
         SyncTextureLodBias(2);
         break;
 
+    // Clipping plane
+    case PICA_REG_INDEX(rasterizer.clip_coef[0]):
+    case PICA_REG_INDEX(rasterizer.clip_coef[1]):
+    case PICA_REG_INDEX(rasterizer.clip_coef[2]):
+    case PICA_REG_INDEX(rasterizer.clip_coef[3]):
+        SyncClipCoef();
+        break;
+
     default:
         // Forward registers that map to fixed function API features to the video backend
         NotifyFixedFunctionPicaRegisterChanged(id);
@@ -682,40 +726,52 @@ void RasterizerAccelerated::SyncDepthOffset() {
 }
 
 void RasterizerAccelerated::SyncFogColor() {
-    const auto& regs = Pica::g_state.regs;
-    uniform_block_data.data.fog_color = {
-        regs.texturing.fog_color.r.Value() / 255.0f,
-        regs.texturing.fog_color.g.Value() / 255.0f,
-        regs.texturing.fog_color.b.Value() / 255.0f,
+    const auto& fog_color_regs = Pica::g_state.regs.texturing.fog_color;
+    const Common::Vec3f fog_color = {
+        fog_color_regs.r.Value() / 255.0f,
+        fog_color_regs.g.Value() / 255.0f,
+        fog_color_regs.b.Value() / 255.0f,
     };
-    uniform_block_data.dirty = true;
+
+    if (fog_color != uniform_block_data.data.fog_color) {
+        uniform_block_data.data.fog_color = fog_color;
+        uniform_block_data.dirty = true;
+    }
 }
 
 void RasterizerAccelerated::SyncProcTexNoise() {
     const auto& regs = Pica::g_state.regs.texturing;
-    uniform_block_data.data.proctex_noise_f = {
+    const Common::Vec2f proctex_noise_f = {
         Pica::float16::FromRaw(regs.proctex_noise_frequency.u).ToFloat32(),
         Pica::float16::FromRaw(regs.proctex_noise_frequency.v).ToFloat32(),
     };
-    uniform_block_data.data.proctex_noise_a = {
+    const Common::Vec2f proctex_noise_a = {
         regs.proctex_noise_u.amplitude / 4095.0f,
         regs.proctex_noise_v.amplitude / 4095.0f,
     };
-    uniform_block_data.data.proctex_noise_p = {
+    const Common::Vec2f proctex_noise_p = {
         Pica::float16::FromRaw(regs.proctex_noise_u.phase).ToFloat32(),
         Pica::float16::FromRaw(regs.proctex_noise_v.phase).ToFloat32(),
     };
 
-    uniform_block_data.dirty = true;
+    if (proctex_noise_f != uniform_block_data.data.proctex_noise_f ||
+        proctex_noise_a != uniform_block_data.data.proctex_noise_a ||
+        proctex_noise_p != uniform_block_data.data.proctex_noise_p) {
+        uniform_block_data.data.proctex_noise_f = proctex_noise_f;
+        uniform_block_data.data.proctex_noise_a = proctex_noise_a;
+        uniform_block_data.data.proctex_noise_p = proctex_noise_p;
+        uniform_block_data.dirty = true;
+    }
 }
 
 void RasterizerAccelerated::SyncProcTexBias() {
     const auto& regs = Pica::g_state.regs.texturing;
-    uniform_block_data.data.proctex_bias =
-        Pica::float16::FromRaw(regs.proctex.bias_low | (regs.proctex_lut.bias_high << 8))
-            .ToFloat32();
-
-    uniform_block_data.dirty = true;
+    const auto proctex_bias = Pica::float16::FromRaw(regs.proctex.bias_low |
+        (regs.proctex_lut.bias_high << 8)).ToFloat32();
+    if (proctex_bias != uniform_block_data.data.proctex_bias) {
+        uniform_block_data.data.proctex_bias = proctex_bias;
+        uniform_block_data.dirty = true;
+    }
 }
 
 void RasterizerAccelerated::SyncAlphaTest() {
@@ -790,7 +846,8 @@ void RasterizerAccelerated::SyncLightPosition(int light_index) {
     const Common::Vec3f position = {
         Pica::float16::FromRaw(Pica::g_state.regs.lighting.light[light_index].x).ToFloat32(),
         Pica::float16::FromRaw(Pica::g_state.regs.lighting.light[light_index].y).ToFloat32(),
-        Pica::float16::FromRaw(Pica::g_state.regs.lighting.light[light_index].z).ToFloat32()};
+        Pica::float16::FromRaw(Pica::g_state.regs.lighting.light[light_index].z).ToFloat32(),
+    };
 
     if (position != uniform_block_data.data.light_src[light_index].position) {
         uniform_block_data.data.light_src[light_index].position = position;
@@ -857,6 +914,16 @@ void RasterizerAccelerated::SyncTextureLodBias(int tex_index) {
     const float bias = pica_textures[tex_index].config.lod.bias / 256.0f;
     if (bias != uniform_block_data.data.tex_lod_bias[tex_index]) {
         uniform_block_data.data.tex_lod_bias[tex_index] = bias;
+        uniform_block_data.dirty = true;
+    }
+}
+
+void RasterizerAccelerated::SyncClipCoef() {
+    const auto raw_clip_coef = Pica::g_state.regs.rasterizer.GetClipCoef();
+    const Common::Vec4f new_clip_coef = {raw_clip_coef.x.ToFloat32(), raw_clip_coef.y.ToFloat32(),
+                                         raw_clip_coef.z.ToFloat32(), raw_clip_coef.w.ToFloat32()};
+    if (new_clip_coef != uniform_block_data.data.clip_coef) {
+        uniform_block_data.data.clip_coef = new_clip_coef;
         uniform_block_data.dirty = true;
     }
 }

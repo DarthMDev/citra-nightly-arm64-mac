@@ -53,6 +53,7 @@ void EmuWindow_Android::OnTouchMoved(int x, int y) {
 void EmuWindow_Android::OnFramebufferSizeChanged() {
     UpdateLandscapeScreenLayout();
     const bool is_portrait_mode{IsPortraitMode()};
+
     const int bigger{window_width > window_height ? window_width : window_height};
     const int smaller{window_width < window_height ? window_width : window_height};
     if (is_portrait_mode) {
@@ -69,6 +70,9 @@ EmuWindow_Android::EmuWindow_Android(ANativeWindow *surface) : host_window{surfa
         LOG_CRITICAL(Frontend, "surface is nullptr");
         return;
     }
+
+    window_width =  ANativeWindow_getWidth(surface);
+    window_height = ANativeWindow_getHeight(surface);
 
     Network::Init();
 }

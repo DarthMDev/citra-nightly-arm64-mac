@@ -21,4 +21,21 @@ MasterSemaphore::~MasterSemaphore() {
     device.destroySemaphore(semaphore);
 }
 
+MasterSemaphoreFence::MasterSemaphoreFence(const Instance& instance) : device{instance.GetDevice()} {
+    fence_reserve.resize(FENCE_RESERVE_COUNT);
+    for (vk::Fence& fence : fence_reserve) {
+        fence = device.createFence({});
+    }
+}
+
+MasterSemaphoreFence::~MasterSemaphoreFence() {
+    device.waitIdle();
+    for (const vk::Fence fence : fence_reserve) {
+        device.destroyFence(fence);
+    }
+    for (const Fence& fence : fences) {
+        device.destroyFence(fence.fence);
+    }
+}
+
 } // namespace Vulkan
